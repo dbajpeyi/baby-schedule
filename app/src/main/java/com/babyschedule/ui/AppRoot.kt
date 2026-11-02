@@ -47,9 +47,16 @@ fun AppRoot(vm: BabyViewModel) {
     }
     val profile by vm.profile.collectAsStateWithLifecycle()
     var showFeeding by rememberSaveable { mutableStateOf(false) }
+    var detail by rememberSaveable { mutableStateOf<Category?>(null) }
 
     if (showFeeding) {
         FeedingSessionScreen(vm, ui, onClose = { showFeeding = false })
+        DialogHost(dialog, vm, ui, onDismiss = { dialog = null })
+        return
+    }
+    val openDetail = detail
+    if (openDetail != null) {
+        DayDetailScreen(vm, ui, openDetail, onClose = { detail = null })
         DialogHost(dialog, vm, ui, onDismiss = { dialog = null })
         return
     }
@@ -90,11 +97,19 @@ fun AppRoot(vm: BabyViewModel) {
     ) { padding ->
         Box(Modifier.padding(padding)) {
             when (tab) {
-                Tab.TODAY -> TodayScreen(vm, ui, onOpenFeeding = { showFeeding = true }, onSeeHistory = {
-                    vm.selectDay(java.time.LocalDate.now())
-                    tab = Tab.HISTORY
-                })
-                Tab.HISTORY -> HistoryScreen(vm, ui)
+                Tab.TODAY -> TodayScreen(
+                    vm, ui,
+                    onOpenFeeding = { showFeeding = true },
+                    onOpenDetail = {
+                        vm.selectDay(java.time.LocalDate.now())
+                        detail = it
+                    },
+                    onSeeHistory = {
+                        vm.selectDay(java.time.LocalDate.now())
+                        tab = Tab.HISTORY
+                    },
+                )
+                Tab.HISTORY -> HistoryScreen(vm, ui, onOpenDetail = { detail = it })
                 Tab.STATS -> StatsScreen(vm)
                 Tab.GROWTH -> GrowthScreen(vm, ui)
             }

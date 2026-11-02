@@ -37,7 +37,7 @@ import com.babyschedule.util.formatMinutes
 import java.time.LocalDate
 
 @Composable
-fun HistoryScreen(vm: BabyViewModel, ui: UiActions) {
+fun HistoryScreen(vm: BabyViewModel, ui: UiActions, onOpenDetail: (Category) -> Unit) {
     val selected by vm.selectedDay.collectAsStateWithLifecycle()
     val data by vm.historyData.collectAsStateWithLifecycle()
     var pickDate by remember { mutableStateOf(false) }
@@ -66,11 +66,11 @@ fun HistoryScreen(vm: BabyViewModel, ui: UiActions) {
         item {
             SectionCard(title = null) {
                 TileGrid(
-                    { m -> StatTile("Feeds", s.feeds.toString(), m, sub = "${s.breastFeeds} breast · ${s.bottleFeeds} bottle", accent = SeriesColors.Left) },
-                    { m -> StatTile("Breastfeeding", formatMinutes(s.breastMin), m, sub = "L ${formatMinutes(s.leftMin)} · R ${formatMinutes(s.rightMin)}", accent = SeriesColors.Right) },
-                    { m -> StatTile("Bottle", "${s.bottleMl} ml", m, accent = SeriesColors.Bottle) },
-                    { m -> StatTile("Diapers", s.diapers.toString(), m, sub = "${s.wetTotal} wet · ${s.dirtyTotal} dirty", accent = SeriesColors.Wet) },
-                    { m -> StatTile("Sleep", formatMinutes(s.sleepMin), m, accent = SeriesColors.Sleep) },
+                    { m -> StatTile("Feeds", s.feeds.toString(), m, sub = "${s.breastFeeds} breast · ${s.bottleFeeds} bottle", accent = SeriesColors.Left, onClick = { onOpenDetail(Category.FEEDS) }) },
+                    { m -> StatTile("Breastfeeding", formatMinutes(s.breastMin), m, sub = "L ${formatMinutes(s.leftMin)} · R ${formatMinutes(s.rightMin)}", accent = SeriesColors.Right, onClick = { onOpenDetail(Category.BREAST) }) },
+                    { m -> StatTile("Bottle", "${s.bottleMl} ml", m, accent = SeriesColors.Bottle, onClick = { onOpenDetail(Category.BOTTLE) }) },
+                    { m -> StatTile("Diapers", s.diapers.toString(), m, sub = "${s.wetTotal} wet · ${s.dirtyTotal} dirty", accent = SeriesColors.Wet, onClick = { onOpenDetail(Category.DIAPERS) }) },
+                    { m -> StatTile("Sleep", formatMinutes(s.sleepMin), m, accent = SeriesColors.Sleep, onClick = { onOpenDetail(Category.SLEEP) }) },
                 )
             }
         }

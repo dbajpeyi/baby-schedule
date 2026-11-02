@@ -1,5 +1,6 @@
 package com.babyschedule.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -8,11 +9,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -26,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -45,7 +49,13 @@ import com.babyschedule.util.formatMinutes
 import com.babyschedule.util.formatTime
 
 @Composable
-fun TodayScreen(vm: BabyViewModel, ui: UiActions, onOpenFeeding: () -> Unit, onSeeHistory: () -> Unit) {
+fun TodayScreen(
+    vm: BabyViewModel,
+    ui: UiActions,
+    onOpenFeeding: () -> Unit,
+    onOpenDetail: (Category) -> Unit,
+    onSeeHistory: () -> Unit,
+) {
     val profile by vm.profile.collectAsStateWithLifecycle()
     val timer by vm.timer.collectAsStateWithLifecycle()
     val sleepStart by vm.sleepStart.collectAsStateWithLifecycle()
@@ -100,7 +110,7 @@ fun TodayScreen(vm: BabyViewModel, ui: UiActions, onOpenFeeding: () -> Unit, onS
                 Text("Add bottle, diaper, sleep or weight", style = MaterialTheme.typography.titleSmall)
             }
         }
-        item { TodaySummaryCard(day) }
+        item { TodaySummaryCard(day, onOpenDetail) }
         if (events.isNotEmpty()) {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -222,24 +232,39 @@ private fun SleepCard(
 }
 
 @Composable
-private fun TodaySummaryCard(day: DayData) {
+private fun TodaySummaryCard(day: DayData, onOpenDetail: (Category) -> Unit) {
     val s = day.summary
     SectionCard(title = "Today so far") {
-        SummaryLine("Feeds", "${s.feeds}", "${s.breastFeeds} breast · ${s.bottleFeeds} bottle")
-        SummaryLine("Breast", formatMinutes(s.breastMin), "Left ${formatMinutes(s.leftMin)} · Right ${formatMinutes(s.rightMin)}")
-        if (s.bottleMl > 0) SummaryLine("Bottle", "${s.bottleMl} ml", null)
-        SummaryLine("Diapers", "${s.diapers}", "${s.wetTotal} wet · ${s.dirtyTotal} dirty")
-        SummaryLine("Sleep", formatMinutes(s.sleepMin), null)
+        SummaryLine("Feeds", "${s.feeds}", "${s.breastFeeds} breast · ${s.bottleFeeds} bottle") { onOpenDetail(Category.FEEDS) }
+        SummaryLine("Breast", formatMinutes(s.breastMin), "Left ${formatMinutes(s.leftMin)} · Right ${formatMinutes(s.rightMin)}") { onOpenDetail(Category.BREAST) }
+        if (s.bottleMl > 0) SummaryLine("Bottle", "${s.bottleMl} ml", null) { onOpenDetail(Category.BOTTLE) }
+        SummaryLine("Diapers", "${s.diapers}", "${s.wetTotal} wet · ${s.dirtyTotal} dirty") { onOpenDetail(Category.DIAPERS) }
+        SummaryLine("Sleep", formatMinutes(s.sleepMin), null) { onOpenDetail(Category.SLEEP) }
     }
 }
 
 @Composable
-private fun SummaryLine(label: String, value: String, detail: String?) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+private fun SummaryLine(label: String, value: String, detail: String?, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.small)
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.width(80.dp))
         Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(72.dp))
-        if (detail != null) {
-            Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        Text(
+            detail ?: "",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
