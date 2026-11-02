@@ -1,17 +1,22 @@
 package com.babyschedule.ui
 
+import android.content.Intent
+import android.provider.Settings
 import android.text.format.DateFormat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -27,6 +32,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
@@ -40,6 +46,8 @@ import com.babyschedule.data.MilkType
 import com.babyschedule.data.Profile
 import com.babyschedule.data.Side
 import com.babyschedule.data.Sleep
+import com.babyschedule.data.SleepAlert
+import com.babyschedule.notify.SleepAlertScheduler
 import com.babyschedule.util.formatDateFull
 import com.babyschedule.util.formatDateShort
 import com.babyschedule.util.formatDuration
@@ -60,6 +68,8 @@ sealed interface DialogRequest {
     data class EditSleep(val sleep: Sleep) : DialogRequest
     data class EditGrowth(val growth: Growth) : DialogRequest
     data object EditProfile : DialogRequest
+    data object AppSettings : DialogRequest
+    data class AddMenu(val time: Long) : DialogRequest
 
     companion object {
         fun newBreastFeeding(time: Long) = EditFeeding(
@@ -122,6 +132,18 @@ fun DialogHost(request: DialogRequest?, vm: BabyViewModel, ui: UiActions, onDism
                 initial = vm.profile.value,
                 onDismiss = onDismiss,
                 onSave = { vm.saveProfile(it); onDismiss() },
+            )
+            DialogRequest.AppSettings -> SettingsDialog(
+                initial = vm.sleepAlert.value,
+                onDismiss = onDismiss,
+                onEditProfile = { ui.openDialog(DialogRequest.EditProfile) },
+                onSave = { vm.setSleepAlert(it); onDismiss() },
+                requestNotifications = ui.requestNotifications,
+            )
+            is DialogRequest.AddMenu -> AddEntryDialog(
+                time = request.time,
+                onDismiss = onDismiss,
+                onPick = { ui.openDialog(it) },
             )
         }
     }
@@ -520,4 +542,105 @@ fun ProfileDialog(initial: Profile, onDismiss: () -> Unit, onSave: (Profile) -> 
     if (showDate) {
         DatePickerPopup(birth ?: LocalDate.now(), onDismiss = { showDate = false }) { birth = it }
     }
+}
+
+@Composable
+fun AddEntryDialog(time: Long, onDismiss: () -> Unit, onPick: (DialogRequest) -> Unit) {
+    val options = listOf(
+        "Bottle feed" to DialogRequest.newBottle(time),
+        "Diaper" to DialogRequest.newDiaper(time),
+        "Past breastfeed" to DialogRequest.newBreastFeeding(time),
+        "Past sleep" to DialogRequest.newSleep(time),
+        "Weight / growth" to DialogRequest.newGrowth(time),
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add entry") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                options.forEach { (label, request) ->
+                    OutlinedButton(
+                        onClick = { onPick(request) },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                    ) { Text(label, style = MaterialTheme.typography.titleSmall) }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+private fun alertLabel(minutes: Int): String =
+    if (minutes % 60 == 0) "${minutes / 60} h" else "${formatNumber(minutes / 60f)} h"
+
+@Composable
+fun SettingsDialog(
+    initial: SleepAlert,
+    onDismiss: () -> Unit,
+    onEditProfile: () -> Unit,
+    onSave: (SleepAlert) -> Unit,
+    requestNotifications: () -> Unit,
+) {
+    val context = LocalContext.current
+    var enabled by remember { mutableStateOf(initial.enabled) }
+    var minutes by remember { mutableStateOf(initial.minutes) }
+    val canNotify = SleepAlertScheduler.canNotify(context)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Settings") },
+        text = {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("Baby", style = MaterialTheme.typography.titleSmall)
+                OutlinedButton(onClick = onEditProfile, modifier = Modifier.fillMaxWidth()) {
+                    Text("Edit name, birth date and weight")
+                }
+                HorizontalDivider()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Long sleep alert", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Send a notification when a sleep goes on longer than:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = enabled,
+                        onCheckedChange = {
+                            enabled = it
+                            if (it) requestNotifications()
+                        },
+                    )
+                }
+                if (enabled) {
+                    ChoiceChips(
+                        options = listOf(60, 90, 120, 150, 180, 240),
+                        selected = minutes,
+                        label = ::alertLabel,
+                        onSelect = { minutes = it },
+                    )
+                    if (!canNotify) {
+                        Text(
+                            "Notifications are turned off for this app, so the alert can't be shown.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        TextButton(onClick = {
+                            context.startActivity(
+                                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                        }) { Text("Turn on notifications") }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(SleepAlert(enabled, minutes)) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

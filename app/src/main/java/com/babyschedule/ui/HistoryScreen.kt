@@ -14,7 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.AssistChip
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -76,11 +76,12 @@ fun HistoryScreen(vm: BabyViewModel, ui: UiActions) {
         }
         item {
             val time = defaultTimeFor(selected)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 4.dp)) {
-                AddChip("Feed") { ui.openDialog(DialogRequest.newBreastFeeding(time)) }
-                AddChip("Bottle") { ui.openDialog(DialogRequest.newBottle(time)) }
-                AddChip("Diaper") { ui.openDialog(DialogRequest.newDiaper(time)) }
-                AddChip("Sleep") { ui.openDialog(DialogRequest.newSleep(time)) }
+            OutlinedButton(
+                onClick = { ui.openDialog(DialogRequest.AddMenu(time)) },
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null)
+                Text("  Add entry")
             }
         }
         if (events.isEmpty()) {
@@ -111,13 +112,4 @@ fun HistoryScreen(vm: BabyViewModel, ui: UiActions) {
     if (pickDate) {
         DatePickerPopup(selected, onDismiss = { pickDate = false }) { vm.selectDay(it) }
     }
-}
-
-@Composable
-private fun AddChip(label: String, onClick: () -> Unit) {
-    AssistChip(
-        onClick = onClick,
-        label = { Text(label) },
-        leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
-    )
 }

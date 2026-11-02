@@ -70,69 +70,84 @@ tap "Birth weight" && type_text "3.4"
 shot 02-profile-dialog
 tap "Save"
 
-# Breastfeeding timer: left, switch to right, finish
+# Breastfeeding session: start on left, switch, end, review, save
 to_top
+tap "Start breastfeeding"
+shot 03-choose-side
 tap "Left"
 sleep 4
-shot 03-timer-left-running
-tap "Right"
+shot 04-feeding-left
+tap "Switch to Right"
 sleep 3
-shot 04-timer-switched-right
-tap "Finish"
-sleep 1
-shot 05-feeding-saved
-
-# Diapers and bottle
+shot 05-feeding-right
+tap "End feeding"
 tap "Wet"
-tap "Both"
-tap "Bottle" && tap "Amount" && type_text "90"
+shot 06-review-feeding
+tap "Save feeding"
+sleep 1
+shot 07-feeding-saved
+
+# Bottle, diaper and weight via "Add entry"
+tap "Add bottle, diaper, sleep or weight"
+shot 08-add-menu
+tap "Bottle feed" && tap "Amount" && type_text "90"
+tap "Save"
+tap "Add bottle, diaper, sleep or weight"
+tap "Diaper" && tap "Wet + dirty"
+tap "Save"
+tap "Add bottle, diaper, sleep or weight"
+tap "Weight / growth" && tap "Weight" && type_text "3.55"
 tap "Save"
 
-# Weight
-tap "Weight" && tap "Weight" && type_text "3.55"
-tap "Save"
-
-# Sleep
+# Sleep (may trigger the notification permission prompt on Android 13+)
 tap "Fell asleep"
+if xy=$(find_xy "Allow"); then adb shell input tap $xy; sleep 1; fi
 sleep 3
-shot 06-sleeping
+shot 09-sleeping
 tap "Woke up"
 
+# Settings
+tap "Settings"
+shot 10-settings
+tap "Cancel"
+
 to_top
-shot 07-today-top
+shot 11-today-top
 scroll_down
-shot 08-today-middle
+shot 12-today-middle
 scroll_down
 scroll_down
-shot 09-today-bottom
+shot 13-today-bottom
 
 tap "History"
 sleep 1
-shot 10-history
+shot 14-history
 tap "Stats"
 sleep 1
-shot 11-stats-top
+shot 15-stats-top
 scroll_down
-shot 12-stats-charts
+shot 16-stats-charts
 tap "Growth"
 sleep 1
-shot 13-growth
+shot 17-growth
 
 # Edit an entry from History
 tap "History"
 tap "Diaper · Wet"
-shot 14-edit-diaper
+shot 18-edit-diaper
 tap "Cancel"
 
-# Survives being killed and restarted (timer + data persist)
+# A running feed survives the app being killed
 tap "Today"
-tap "Left"
+to_top
+tap "Start breastfeeding"
+tap "Right"
 adb shell am force-stop $PKG
 sleep 2
 adb shell am start -W -n $PKG/.MainActivity
 sleep 4
 to_top
-shot 15-timer-after-restart
+shot 19-feed-in-progress-after-restart
 
 adb logcat -d -b crash > "$OUT/crash-log.txt" || true
 adb logcat -d > "$OUT/logcat.txt" || true

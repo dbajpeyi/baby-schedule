@@ -4,18 +4,14 @@ A simple Android app for tracking a newborn's day. It's built to be quick to use
 
 ## Features
 
-- **Breastfeeding timer (left / right).** Tap **Left** or **Right** to start. Tap the other side to switch, or tap the running side to pause. Press **Finish** to save. The app suggests which side to start on next. The timer keeps running if the app is closed.
-- **Bottle feeds.** Log the amount in ml and whether it was formula or breast milk.
-- **Diapers.** One tap for Wet, Dirty or Both. Every quick action has **Undo**.
-- **Sleep.** Tap "Fell asleep" and then "Woke up", or add a past sleep.
-- **Weight and growth.** Log weight, length and head size. You see the change since birth weight and the weekly gain, plus a weight chart.
-- **Today.** Shows the time since the last feed, diaper and sleep, today's totals and today's log.
+- **Breastfeeding sessions.** Tap **Start breastfeeding** and pick the starting side (the suggested side is highlighted). Use **Switch side** and **Pause** as needed, then **End feeding**. Check the summary (left and right minutes, plus an optional diaper change) and save it as one feed. The timer keeps running if you leave the screen or close the app.
+- **Sleep.** Tap **Fell asleep**, then **Woke up**.
+- **Long sleep alert.** Get a notification when a sleep goes on longer than a set time (2 hours by default). Change it in **Settings** (gear icon).
+- **Add entry.** Bottle feeds, diapers, past feeds or sleeps, and weight. Each opens a short form with **Save**, so nothing is logged by accident.
+- **Today.** Shows the last feed, the suggested next side, sleep status, today's totals and today's log.
 - **History.** Go back day by day. Tap any entry to edit or delete it.
-- **Stats** for 7, 14 or 30 days:
-  - average feeds per day and time between feeds
-  - left/right balance
-  - diapers per day and sleep per day
-  - bar charts for each of these
+- **Stats** for 7, 14 or 30 days: feeds per day, time between feeds, left/right balance, diapers and sleep, with simple bar charts.
+- **Growth.** Weight, length and head size. Shows the change since birth and the weekly gain, with a weight chart.
 
 Everything is stored on the phone (Room database). Android's automatic backup includes it.
 

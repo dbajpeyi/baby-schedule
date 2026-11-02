@@ -15,6 +15,8 @@ import com.babyschedule.data.Growth
 import com.babyschedule.data.Profile
 import com.babyschedule.data.Side
 import com.babyschedule.data.Sleep
+import com.babyschedule.data.SleepAlert
+import com.babyschedule.notify.SleepAlertScheduler
 import com.babyschedule.domain.DayStats
 import com.babyschedule.domain.GrowthSummary
 import com.babyschedule.domain.Stats
@@ -44,11 +46,15 @@ data class DayData(
     val summary: DayStats by lazy { StatsCalculator.day(date, feedings, diapers, sleeps) }
 }
 
-class BabyViewModel(private val repo: BabyRepository) : ViewModel() {
+class BabyViewModel(
+    private val repo: BabyRepository,
+    private val sleepAlerts: SleepAlertScheduler,
+) : ViewModel() {
 
     val profile: StateFlow<Profile> = repo.prefs.profile
     val timer: StateFlow<FeedingTimer> = repo.prefs.timer
     val sleepStart: StateFlow<Long?> = repo.prefs.sleepStart
+    val sleepAlert: StateFlow<SleepAlert> = repo.prefs.sleepAlert
 
     /** Emits the current date and changes at midnight. */
     private val today: StateFlow<LocalDate> = flow {
@@ -126,47 +132,69 @@ class BabyViewModel(private val repo: BabyRepository) : ViewModel() {
 
     private fun now() = System.currentTimeMillis()
 
-    fun tapSide(side: Side) = repo.prefs.setTimer(timer.value.tap(side, now()))
+    fun startFeeding(side: Side) = repo.prefs.setTimer(FeedingTimer().tap(side, now()))
+
+    /** Switches to the other breast (or starts the other one if paused). */
+    fun switchSide() {
+        val t = timer.value
+        val current = t.activeSide ?: t.lastSide ?: Side.RIGHT
+        repo.prefs.setTimer(t.startSide(current.other(), now()))
+    }
 
     fun pauseTimer() = repo.prefs.setTimer(timer.value.pause(now()))
 
-    fun discardTimer() = repo.prefs.setTimer(FeedingTimer())
-
-    /** Saves the running session. Returns the saved id and previous timer (for undo). */
-    suspend fun finishTimer(): Pair<Long, FeedingTimer>? {
-        val previous = timer.value
-        val feeding = previous.toFeeding(now())
-        repo.prefs.setTimer(FeedingTimer())
-        if (feeding == null) return null
-        val id = repo.save(feeding)
-        return id to previous
+    fun resumeTimer() {
+        val t = timer.value
+        repo.prefs.setTimer(t.startSide(t.lastSide ?: Side.LEFT, now()))
     }
 
-    suspend fun undoFinish(id: Long, previous: FeedingTimer) {
-        repo.delete(Feeding(id = id, type = com.babyschedule.data.FeedingType.BREAST, startTime = 0, endTime = 0))
-        repo.prefs.setTimer(previous)
+    fun discardTimer() = repo.prefs.setTimer(FeedingTimer())
+
+    data class SavedSession(val feedingId: Long, val diaperId: Long?, val previous: FeedingTimer)
+
+    /** Saves the current session (and an optional diaper change). */
+    suspend fun saveSession(diaper: DiaperType?, notes: String): SavedSession? {
+        val previous = timer.value
+        val feeding = previous.toFeeding(now())?.copy(notes = notes.trim()) ?: return null
+        repo.prefs.setTimer(FeedingTimer())
+        val feedingId = repo.save(feeding)
+        val diaperId = diaper?.let { repo.save(Diaper(time = feeding.endTime, type = it)) }
+        return SavedSession(feedingId, diaperId, previous)
+    }
+
+    suspend fun undoSession(saved: SavedSession) {
+        repo.delete(Feeding(id = saved.feedingId, type = com.babyschedule.data.FeedingType.BREAST, startTime = 0, endTime = 0))
+        saved.diaperId?.let { repo.delete(Diaper(id = it, time = 0, type = DiaperType.WET)) }
+        repo.prefs.setTimer(saved.previous)
     }
 
     // ---- sleep timer ----
 
-    fun startSleep() = repo.prefs.setSleepStart(now())
+    fun startSleep() {
+        repo.prefs.setSleepStart(now())
+        sleepAlerts.sync()
+    }
 
-    fun cancelSleep() = repo.prefs.setSleepStart(null)
+    fun cancelSleep() {
+        repo.prefs.setSleepStart(null)
+        sleepAlerts.sync()
+    }
+
+    fun setSleepAlert(alert: SleepAlert) {
+        repo.prefs.setSleepAlert(alert)
+        sleepAlerts.sync()
+    }
 
     suspend fun stopSleep(): Sleep? {
         val start = sleepStart.value ?: return null
         repo.prefs.setSleepStart(null)
+        sleepAlerts.sync()
         val sleep = Sleep(startTime = start, endTime = now())
         val id = repo.save(sleep)
         return sleep.copy(id = id)
     }
 
     // ---- entries ----
-
-    suspend fun logDiaper(type: DiaperType): Diaper {
-        val diaper = Diaper(time = now(), type = type)
-        return diaper.copy(id = repo.save(diaper))
-    }
 
     fun save(item: Feeding) = viewModelScope.launch { repo.save(item) }
     fun save(item: Diaper) = viewModelScope.launch { repo.save(item) }
@@ -182,7 +210,7 @@ class BabyViewModel(private val repo: BabyRepository) : ViewModel() {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as BabyScheduleApp
-                BabyViewModel(app.repository)
+                BabyViewModel(app.repository, app.sleepAlerts)
             }
         }
     }

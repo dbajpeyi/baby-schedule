@@ -62,7 +62,13 @@ data class FeedingTimer(
         }
     }
 
-    fun pause(now: Long): FeedingTimer = settle(now).copy(activeSide = null)
+    /** Starts (or switches to) [side]; does nothing if it is already running. */
+    fun startSide(side: Side, now: Long): FeedingTimer = if (activeSide == side) this else tap(side, now)
+
+    fun pause(now: Long): FeedingTimer = if (activeSide == null) this else settle(now).copy(activeSide = null)
+
+    /** When the feed ended: now if running, otherwise the moment it was paused. */
+    fun endTime(now: Long): Long = if (isRunning) now else maxOf(segmentStart, sessionStart ?: segmentStart)
 
     /** Converts the session into a feeding record, or null if nothing was timed. */
     fun toFeeding(now: Long): Feeding? {
@@ -73,7 +79,7 @@ data class FeedingTimer(
         return Feeding(
             type = FeedingType.BREAST,
             startTime = start,
-            endTime = now,
+            endTime = endTime(now),
             leftSeconds = left,
             rightSeconds = right,
             firstSide = firstSide,
@@ -81,6 +87,9 @@ data class FeedingTimer(
         )
     }
 }
+
+/** Notify when a sleep has lasted [minutes]. */
+data class SleepAlert(val enabled: Boolean = true, val minutes: Int = 120)
 
 class AppPrefs(context: Context) {
     private val sp: SharedPreferences =
@@ -94,6 +103,23 @@ class AppPrefs(context: Context) {
 
     private val _sleepStart = MutableStateFlow(sp.getLong(K_SLEEP_START, 0L).takeIf { it > 0 })
     val sleepStart: StateFlow<Long?> = _sleepStart.asStateFlow()
+
+    private val _sleepAlert = MutableStateFlow(
+        SleepAlert(sp.getBoolean(K_ALERT_ON, true), sp.getInt(K_ALERT_MINUTES, 120))
+    )
+    val sleepAlert: StateFlow<SleepAlert> = _sleepAlert.asStateFlow()
+
+    fun setSleepAlert(a: SleepAlert) {
+        sp.edit().putBoolean(K_ALERT_ON, a.enabled).putInt(K_ALERT_MINUTES, a.minutes).apply()
+        _sleepAlert.value = a
+    }
+
+    /** The sleep start for which the alert was already shown (to avoid repeats). */
+    var sleepAlertShownFor: Long
+        get() = sp.getLong(K_ALERT_SHOWN_FOR, 0L)
+        set(v) {
+            sp.edit().putLong(K_ALERT_SHOWN_FOR, v).apply()
+        }
 
     fun saveProfile(p: Profile) {
         sp.edit()
@@ -152,6 +178,9 @@ class AppPrefs(context: Context) {
         const val K_BIRTH = "birth_epoch_day"
         const val K_BIRTH_WEIGHT = "birth_weight_g"
         const val K_SLEEP_START = "sleep_start"
+        const val K_ALERT_ON = "sleep_alert_on"
+        const val K_ALERT_MINUTES = "sleep_alert_minutes"
+        const val K_ALERT_SHOWN_FOR = "sleep_alert_shown_for"
         const val K_T_START = "timer_start"
         const val K_T_ACTIVE = "timer_active"
         const val K_T_SEGMENT = "timer_segment"

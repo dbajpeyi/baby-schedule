@@ -53,6 +53,19 @@ class LogicTest {
     }
 
     @Test
+    fun pausedSessionEndsWhenPaused() {
+        val t0 = at(9)
+        val t = FeedingTimer().tap(Side.LEFT, t0)
+            .startSide(Side.RIGHT, t0 + 5 * 60_000)
+            .startSide(Side.RIGHT, t0 + 6 * 60_000) // already running: no change
+            .pause(t0 + 8 * 60_000)
+        val f = t.toFeeding(t0 + 30 * 60_000)!!
+        assertEquals(t0 + 8 * 60_000, f.endTime)
+        assertEquals(300, f.leftSeconds)
+        assertEquals(180, f.rightSeconds)
+    }
+
+    @Test
     fun suggestedSide() {
         assertEquals(Side.LEFT, StatsCalculator.suggestedSide(null))
         val onlyLeft = Feeding(type = FeedingType.BREAST, startTime = 0, endTime = 0, leftSeconds = 600)

@@ -41,8 +41,18 @@ fun AppRoot(vm: BabyViewModel) {
     var dialog by remember { mutableStateOf<DialogRequest?>(null) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val ui = remember(scope, snackbar) { UiActions(scope, snackbar) { dialog = it } }
+    val requestNotifications = rememberNotificationPermissionRequest()
+    val ui = remember(scope, snackbar, requestNotifications) {
+        UiActions(scope, snackbar, requestNotifications) { dialog = it }
+    }
     val profile by vm.profile.collectAsStateWithLifecycle()
+    var showFeeding by rememberSaveable { mutableStateOf(false) }
+
+    if (showFeeding) {
+        FeedingSessionScreen(vm, ui, onClose = { showFeeding = false })
+        DialogHost(dialog, vm, ui, onDismiss = { dialog = null })
+        return
+    }
 
     Scaffold(
         topBar = {
@@ -58,8 +68,8 @@ fun AppRoot(vm: BabyViewModel) {
                     )
                 },
                 actions = {
-                    IconButton(onClick = { dialog = DialogRequest.EditProfile }) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Baby profile")
+                    IconButton(onClick = { dialog = DialogRequest.AppSettings }) {
+                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
                     }
                 },
             )
@@ -80,7 +90,7 @@ fun AppRoot(vm: BabyViewModel) {
     ) { padding ->
         Box(Modifier.padding(padding)) {
             when (tab) {
-                Tab.TODAY -> TodayScreen(vm, ui, onSeeHistory = {
+                Tab.TODAY -> TodayScreen(vm, ui, onOpenFeeding = { showFeeding = true }, onSeeHistory = {
                     vm.selectDay(java.time.LocalDate.now())
                     tab = Tab.HISTORY
                 })
