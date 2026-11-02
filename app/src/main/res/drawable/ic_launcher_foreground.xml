@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simple baby bottle on a 108dp adaptive-icon canvas (safe zone is the centre 66dp). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- nipple -->
+    <path
+        android:fillColor="#FFAD1457"
+        android:pathData="M50,30 Q54,22 58,30 L58,34 L50,34 Z" />
+    <!-- collar -->
+    <path
+        android:fillColor="#FF6A1B9A"
+        android:pathData="M45,34 L63,34 Q65,34 65,36 L65,40 Q65,42 63,42 L45,42 Q43,42 43,40 L43,36 Q43,34 45,34 Z" />
+    <!-- bottle body -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M46,42 L62,42 Q66,42 66,46 L66,76 Q66,82 60,82 L48,82 Q42,82 42,76 L42,46 Q42,42 46,42 Z" />
+    <!-- milk -->
+    <path
+        android:fillColor="#FFFFE0B2"
+        android:pathData="M42,58 L66,58 L66,76 Q66,82 60,82 L48,82 Q42,82 42,76 Z" />
+    <!-- marks -->
+    <path
+        android:fillColor="#FF6A1B9A"
+        android:pathData="M46,50 L52,50 L52,52 L46,52 Z M46,62 L52,62 L52,64 L46,64 Z M46,70 L52,70 L52,72 L46,72 Z" />
+</vector>
