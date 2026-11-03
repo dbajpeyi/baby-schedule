@@ -87,6 +87,13 @@ private fun androidx.compose.foundation.lazy.LazyListScope.statsContent(s: Stats
                         m, accent = SeriesColors.Right,
                     )
                 },
+                { m ->
+                    StatTile(
+                        "Food", "${s.avgFoodPerDay.roundToInt()} g", m,
+                        sub = s.avgFoodPerFeed?.let { "≈ ${it.roundToInt()} g per feed" },
+                        accent = SeriesColors.Weight,
+                    )
+                },
                 { m -> StatTile("Bottle", "${s.avgBottleMlPerDay.roundToInt()} ml", m, accent = SeriesColors.Bottle) },
                 { m ->
                     StatTile(
@@ -108,6 +115,25 @@ private fun androidx.compose.foundation.lazy.LazyListScope.statsContent(s: Stats
                 values = s.days.map { listOf(it.breastFeeds.toFloat(), it.bottleFeeds.toFloat()) },
                 colors = listOf(SeriesColors.Left, SeriesColors.Bottle),
             )
+        }
+    }
+
+    if (s.days.any { it.foodG > 0 }) {
+        item {
+            SectionCard(title = "Food per day (g)") {
+                Legend(listOf("Breast (weighed)" to SeriesColors.Left, "Bottle" to SeriesColors.Bottle))
+                StackedBarChart(
+                    labels = labels,
+                    values = s.days.map { listOf(it.breastIntakeG.toFloat().coerceAtLeast(0f), it.bottleMl.toFloat()) },
+                    colors = listOf(SeriesColors.Left, SeriesColors.Bottle),
+                    format = { it.roundToInt().toString() },
+                )
+                Text(
+                    "Breast amounts come from weighing before and after a feed; bottle ml count as grams.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 

@@ -415,7 +415,8 @@ private fun sessionLook(e: TimelineEvent.SessionEvent): EventLook {
         e.session.notes.takeIf { it.isNotBlank() }?.let { add(it) }
     }
     val title = when {
-        f != null && f.type == FeedingType.BREAST -> "Breastfeeding · ${formatDuration(f.totalSeconds.toLong())}"
+        f != null && f.type == FeedingType.BREAST ->
+            "Breastfeeding · ${formatDuration(f.totalSeconds.toLong())}" + (f.intakeGrams?.let { " · $it g" } ?: "")
         f != null -> "Bottle · ${f.amountMl ?: 0} ml"
         e.sleep != null || e.sleepingSince != null -> "Sleep"
         e.diapers.isNotEmpty() -> "Diaper"
@@ -438,7 +439,7 @@ private fun TimelineEvent.look(): EventLook = when (this) {
         if (f.type == FeedingType.BREAST) {
             EventLook(
                 Icons.Filled.ChildCare, SeriesColors.Left,
-                "Breastfeeding · ${formatDuration(f.totalSeconds.toLong())}",
+                "Breastfeeding · ${formatDuration(f.totalSeconds.toLong())}" + (f.intakeGrams?.let { " · $it g" } ?: ""),
                 sideLines(f) + listOfNotNull(weightLine(f), f.notes.takeIf { it.isNotBlank() }),
                 "${formatTime(f.startTime)} – ${formatTime(f.endTime)}",
             )

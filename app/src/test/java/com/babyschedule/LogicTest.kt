@@ -75,6 +75,7 @@ class LogicTest {
         val d = StatsCalculator.compute(day, day, listOf(f), emptyList(), emptyList(), zone).days.single()
         assertEquals(45, d.breastIntakeG)
         assertEquals(1, d.weighedFeeds)
+        assertEquals(45, d.foodG)
     }
 
     @Test
@@ -205,6 +206,10 @@ class LogicTest {
         assertEquals(20f, d.leftMin, 0.01f)
         assertEquals(10f, d.rightMin, 0.01f)
         assertEquals(90, d.bottleMl)
+        // Only the bottle has a known amount: food = 90 g over 1 feed.
+        assertEquals(90, d.foodG)
+        assertEquals(1, d.measuredFeeds)
+        assertEquals(90f, s.avgFoodPerFeed!!, 0.01f)
         assertEquals(2, d.wetTotal)
         assertEquals(1, d.dirtyTotal)
         assertEquals(120f, d.sleepMin, 0.01f)

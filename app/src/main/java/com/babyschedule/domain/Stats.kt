@@ -37,6 +37,10 @@ data class DayStats(
     val feeds: Int get() = breastFeeds + bottleFeeds
     val diapers: Int get() = wet + dirty + mixed
     val breastMin: Float get() = leftMin + rightMin
+    /** Food in grams: weighed breastfeeds plus bottle ml (1 ml ≈ 1 g). */
+    val foodG: Int get() = breastIntakeG + bottleMl
+    /** Feeds whose amount is known (weighed breastfeeds and bottles). */
+    val measuredFeeds: Int get() = weighedFeeds + bottleFeeds
     val wetTotal: Int get() = wet + mixed
     val dirtyTotal: Int get() = dirty + mixed
     val hasData: Boolean get() = feeds > 0 || diapers > 0 || sleepMin > 0f
@@ -57,6 +61,10 @@ data class Stats(
     val leftShare: Float?,
     val avgBreastMinPerDay: Float,
     val avgBottleMlPerDay: Float,
+    /** Grams of food per day (weighed breastfeeds + bottles). */
+    val avgFoodPerDay: Float,
+    /** Grams per feed, over feeds whose amount is known; null if none. */
+    val avgFoodPerFeed: Float?,
     val avgDiapersPerDay: Float,
     val avgWetPerDay: Float,
     val avgDirtyPerDay: Float,
@@ -169,6 +177,8 @@ object StatsCalculator {
             leftShare = leftShare,
             avgBreastMinPerDay = days.sumOf { it.breastMin.toDouble() }.toFloat() / n,
             avgBottleMlPerDay = days.sumOf { it.bottleMl } / n,
+            avgFoodPerDay = days.sumOf { it.foodG } / n,
+            avgFoodPerFeed = days.sumOf { it.measuredFeeds }.takeIf { it > 0 }?.let { days.sumOf { d -> d.foodG }.toFloat() / it },
             avgDiapersPerDay = days.sumOf { it.diapers } / n,
             avgWetPerDay = days.sumOf { it.wetTotal } / n,
             avgDirtyPerDay = days.sumOf { it.dirtyTotal } / n,

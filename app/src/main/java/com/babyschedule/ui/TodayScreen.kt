@@ -303,7 +303,11 @@ private fun TodaySummaryCard(
             },
         )
         HorizontalDivider()
-        SummaryLine("Feeds", "${s.feeds}", "${s.breastFeeds} breast · ${s.bottleFeeds} bottle") { onOpenDetail(Category.FEEDS) }
+        SummaryLine(
+            "Feeds",
+            "${s.feeds}",
+            "${s.breastFeeds} breast · ${s.bottleFeeds} bottle" + if (s.measuredFeeds > 0) " · ${s.foodG} g" else "",
+        ) { onOpenDetail(Category.FEEDS) }
         SummaryLine(
             "Breast",
             formatMinutes(s.breastMin),

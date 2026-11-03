@@ -173,6 +173,8 @@ private fun breakdown(category: Category, day: DayData): List<Pair<String, Strin
                 "Total feeds" to "${s.feeds}",
                 "Breastfeeds" to "${s.breastFeeds}",
                 "Bottle feeds" to "${s.bottleFeeds}",
+                "Food total" to (if (s.measuredFeeds == 0) "—" else "${s.foodG} g"),
+                "Average per feed" to (if (s.measuredFeeds == 0) "—" else "${s.foodG / s.measuredFeeds} g (${s.measuredFeeds} with amount)"),
                 "Average time between" to gapText(starts) { g -> if (g.isEmpty()) null else g.average().toLong() },
                 "Longest time between" to gapText(starts) { g -> g.maxOrNull() },
                 "First feed" to (starts.minOrNull()?.let { formatTime(it) } ?: "—"),

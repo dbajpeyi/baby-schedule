@@ -68,7 +68,7 @@ fun HistoryScreen(vm: BabyViewModel, ui: UiActions, onOpenDetail: (Category) -> 
         item {
             SectionCard(title = null) {
                 TileGrid(
-                    { m -> StatTile("Feeds", s.feeds.toString(), m, sub = "${s.breastFeeds} breast · ${s.bottleFeeds} bottle", accent = SeriesColors.Left, onClick = { onOpenDetail(Category.FEEDS) }) },
+                    { m -> StatTile("Feeds", s.feeds.toString(), m, sub = "${s.breastFeeds} breast · ${s.bottleFeeds} bottle" + if (s.measuredFeeds > 0) " · ${s.foodG} g" else "", accent = SeriesColors.Left, onClick = { onOpenDetail(Category.FEEDS) }) },
                     { m -> StatTile("Breastfeeding", formatMinutes(s.breastMin), m, sub = "L ${formatMinutes(s.leftMin)} · R ${formatMinutes(s.rightMin)}", accent = SeriesColors.Right, onClick = { onOpenDetail(Category.BREAST) }) },
                     { m -> StatTile("Bottle", "${s.bottleMl} ml", m, accent = SeriesColors.Bottle, onClick = { onOpenDetail(Category.BOTTLE) }) },
                     { m -> StatTile("Diapers", s.diapers.toString(), m, sub = "${s.wetTotal} pee · ${s.dirtyTotal} poop", accent = SeriesColors.Wet, onClick = { onOpenDetail(Category.DIAPERS) }) },
