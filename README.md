@@ -12,6 +12,8 @@ A simple Android app for tracking a newborn's day. It's built to be quick to use
 
   The log shows each session as one entry. Tap it to edit or delete.
 - **Live timers (secondary).** The feeding timer records side switches as they happen, and ending it opens the session form already filled in. "Fell asleep now" times a sleep; when the baby wakes, the app offers to add that sleep to the session just before it.
+- **Home-screen widget.** Shows the last feed, the next side and sleep status, with a **Log a session** button that opens the form directly. Long-press the home screen, choose **Widgets**, then **Baby Schedule**.
+- **Confetti** when a new session is saved. You can turn it off in Settings.
 - **Long sleep alert.** A notification when a sleep goes on longer than a set time (2 hours by default). Set it in **Settings**.
 - **Single entries.** Bottle, diaper, sleep or weight, logged on their own.
 - **Today.** The last feed, the suggested next side, sleep status, today's totals and today's log.

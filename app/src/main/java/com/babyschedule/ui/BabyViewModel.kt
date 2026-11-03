@@ -68,6 +68,9 @@ class BabyViewModel(
     val sleepStart: StateFlow<Long?> = repo.prefs.sleepStart
     val sleepSessionId: StateFlow<Long?> = repo.prefs.sleepSessionId
     val sleepAlert: StateFlow<SleepAlert> = repo.prefs.sleepAlert
+    val confetti: StateFlow<Boolean> = repo.prefs.confetti
+
+    fun setConfetti(on: Boolean) = repo.prefs.setConfetti(on)
 
     /** Emits the current date and changes at midnight. */
     private val today: StateFlow<LocalDate> = flow {

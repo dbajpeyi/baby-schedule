@@ -91,6 +91,7 @@ fun SessionFormScreen(initial: SessionDraft, vm: BabyViewModel, ui: UiActions, o
                             ui.launch {
                                 vm.saveSession(draft)
                                 onClose()
+                                if (draft.isNew) ui.celebrate()
                                 ui.message("Session saved")
                             }
                         },
@@ -206,18 +207,20 @@ fun SessionFormScreen(initial: SessionDraft, vm: BabyViewModel, ui: UiActions, o
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Button(
+            PrimaryButton(
+                text = "Save session",
                 enabled = d.canSave,
                 onClick = {
                     val draft = d
                     ui.launch {
                         vm.saveSession(draft)
                         onClose()
+                        if (draft.isNew) ui.celebrate()
                         ui.message("Session saved")
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(56.dp),
-            ) { Text("Save session", style = MaterialTheme.typography.titleMedium) }
+            )
 
             if (!d.isNew) {
                 TextButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth()) {
@@ -283,7 +286,9 @@ private fun BreastSection(d: SessionDraft, onChange: (SessionDraft) -> Unit) {
             } else null,
         )
     }
-    OutlinedButton(
+    SecondaryButton(
+        text = "Add side",
+        icon = Icons.Filled.Add,
         onClick = {
             val last = d.segments.maxByOrNull { it.end }
             val side = last?.side?.other() ?: Side.LEFT
@@ -291,11 +296,7 @@ private fun BreastSection(d: SessionDraft, onChange: (SessionDraft) -> Unit) {
             onChange(d.copy(segments = d.segments + Segment(side, start, start + 10 * MIN)))
         },
         modifier = Modifier.fillMaxWidth(),
-    ) {
-        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(6.dp))
-        Text("Add side")
-    }
+    )
     val total = d.segments.sumOf { it.durationMs }
     Text("Total ${formatDuration(total / 1000)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
 

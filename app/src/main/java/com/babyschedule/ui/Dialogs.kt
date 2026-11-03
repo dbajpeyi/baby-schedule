@@ -137,9 +137,14 @@ fun DialogHost(request: DialogRequest?, vm: BabyViewModel, ui: UiActions, onDism
             )
             DialogRequest.AppSettings -> SettingsDialog(
                 initial = vm.sleepAlert.value,
+                initialConfetti = vm.confetti.value,
                 onDismiss = onDismiss,
                 onEditProfile = { ui.openDialog(DialogRequest.EditProfile) },
-                onSave = { vm.setSleepAlert(it); onDismiss() },
+                onSave = { alert, confetti ->
+                    vm.setSleepAlert(alert)
+                    vm.setConfetti(confetti)
+                    onDismiss()
+                },
                 requestNotifications = ui.requestNotifications,
             )
             is DialogRequest.AddMenu -> AddEntryDialog(
@@ -510,14 +515,16 @@ private fun alertLabel(minutes: Int): String =
 @Composable
 fun SettingsDialog(
     initial: SleepAlert,
+    initialConfetti: Boolean,
     onDismiss: () -> Unit,
     onEditProfile: () -> Unit,
-    onSave: (SleepAlert) -> Unit,
+    onSave: (SleepAlert, Boolean) -> Unit,
     requestNotifications: () -> Unit,
 ) {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(initial.enabled) }
     var minutes by remember { mutableStateOf(initial.minutes) }
+    var confetti by remember { mutableStateOf(initialConfetti) }
     val canNotify = SleepAlertScheduler.canNotify(context)
 
     AlertDialog(
@@ -531,6 +538,18 @@ fun SettingsDialog(
                 Text("Baby", style = MaterialTheme.typography.titleSmall)
                 OutlinedButton(onClick = onEditProfile, modifier = Modifier.fillMaxWidth()) {
                     Text("Edit name, birth date and weight")
+                }
+                HorizontalDivider()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Confetti", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Celebrate when a session is saved",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = confetti, onCheckedChange = { confetti = it })
                 }
                 HorizontalDivider()
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -574,7 +593,7 @@ fun SettingsDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(SleepAlert(enabled, minutes)) }) { Text("Save") } },
+        confirmButton = { TextButton(onClick = { onSave(SleepAlert(enabled, minutes), confetti) }) { Text("Save") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

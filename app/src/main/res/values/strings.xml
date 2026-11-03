@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Baby Schedule</string>
+    <string name="widget_description">Last feed, next side and sleep, with a button to log a session</string>
+    <string name="widget_log_session">+ Log a session</string>
 </resources>

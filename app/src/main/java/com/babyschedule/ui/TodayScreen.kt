@@ -16,13 +16,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Assessment
+import androidx.compose.material.icons.outlined.Bedtime
 import androidx.compose.material.icons.outlined.CheckBox
 import androidx.compose.material.icons.outlined.EditCalendar
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -32,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,6 +79,7 @@ fun TodayScreen(
     val lastSleep by vm.lastSleep.collectAsStateWithLifecycle()
     val events = day.timeline(sleepSessionId, sleepStart)
     var attachPrompt by remember { mutableStateOf<Session?>(null) }
+    var showMore by rememberSaveable { mutableStateOf(false) }
 
     fun wokeUp(attachTo: Long?) {
         ui.launch {
@@ -93,24 +99,18 @@ fun TodayScreen(
             item { BabyHeader(profile) }
         }
 
-        // Main action: log what happened.
+        // 1. Main action: log what happened.
         item {
-            Button(
+            PrimaryButton(
+                text = "Log a session",
+                subtitle = "Diaper, feeding, weights, sleep",
+                icon = Icons.Outlined.EditCalendar,
                 onClick = { ui.editDraft(SessionDraft.new(System.currentTimeMillis())) },
                 modifier = Modifier.fillMaxWidth().height(72.dp),
-            ) {
-                Icon(Icons.Outlined.EditCalendar, contentDescription = null, modifier = Modifier.size(28.dp))
-                Spacer(Modifier.width(12.dp))
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Log a session", style = MaterialTheme.typography.titleLarge)
-                    Text("Diaper, feeding, weights, sleep", style = MaterialTheme.typography.bodySmall)
-                }
-            }
+            )
         }
 
-        item { StatusCard(lastFeeding, lastBreast, lastSleep, sleepStart) }
-
-        // Live timers, if running.
+        // Running timers stay visible while they run.
         if (timer.isActive) {
             item { LiveFeedingCard(timer, onOpenFeeding) }
         }
@@ -129,40 +129,50 @@ fun TodayScreen(
             }
         }
 
-        // Secondary: start live timers / add single entries.
+        // 2. Today so far.
+        item { TodaySummaryCard(day, lastFeeding, lastBreast, lastSleep, sleepStart, onOpenDetail) }
+
+        // 3. Secondary actions, tucked away.
         item {
-            SectionCard(title = "Live timers", icon = Icons.Outlined.Timer) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (!timer.isActive) {
-                        OutlinedButton(onClick = onOpenFeeding, modifier = Modifier.weight(1f)) { Text("Feeding timer") }
-                    }
-                    if (sleepStart == null) {
-                        OutlinedButton(
-                            onClick = {
-                                vm.startSleep()
-                                if (vm.sleepAlert.value.enabled) ui.requestNotifications()
-                            },
-                            modifier = Modifier.weight(1f),
-                        ) { Text("Fell asleep now") }
+            Column {
+                TextButton(onClick = { showMore = !showMore }) {
+                    Icon(Icons.Outlined.Timer, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Timers and single entries")
+                    Icon(
+                        if (showMore) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null,
+                    )
+                }
+                if (showMore) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (!timer.isActive) {
+                                SecondaryButton("Feeding timer", onOpenFeeding, Modifier.weight(1f), icon = Icons.Outlined.Timer)
+                            }
+                            if (sleepStart == null) {
+                                SecondaryButton(
+                                    "Fell asleep now",
+                                    onClick = {
+                                        vm.startSleep()
+                                        if (vm.sleepAlert.value.enabled) ui.requestNotifications()
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Outlined.Bedtime,
+                                )
+                            }
+                        }
+                        SecondaryButton(
+                            "Add a single entry (e.g. bottle)",
+                            onClick = { ui.openDialog(DialogRequest.AddMenu(System.currentTimeMillis())) },
+                            modifier = Modifier.fillMaxWidth(),
+                            icon = Icons.Outlined.CheckBox,
+                        )
                     }
                 }
-                if (timer.isActive && sleepStart != null) {
-                    Text("Both timers are running.", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
-        item {
-            OutlinedButton(
-                onClick = { ui.openDialog(DialogRequest.AddMenu(System.currentTimeMillis())) },
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-            ) {
-                Icon(Icons.Outlined.CheckBox, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Add a single entry (e.g. bottle)", maxLines = 1)
             }
         }
 
-        item { TodaySummaryCard(day, onOpenDetail) }
         if (events.isNotEmpty()) {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -221,30 +231,6 @@ private fun BabyHeader(profile: Profile) {
 }
 
 @Composable
-private fun StatusCard(lastFeeding: Feeding?, lastBreast: Feeding?, lastSleep: Sleep?, sleepStart: Long?) {
-    val now by rememberNow(30_000)
-    SectionCard(title = null) {
-        StatusLine(
-            "Last feed",
-            lastFeeding?.let { f ->
-                val what = if (f.type == FeedingType.BREAST) "breast, ${formatDuration(f.totalSeconds.toLong())}"
-                else "bottle, ${f.amountMl ?: 0} ml"
-                "${formatAgo(f.startTime, now)} ($what)"
-            } ?: "—",
-        )
-        StatusLine("Next side", StatsCalculator.suggestedSide(lastBreast).label)
-        StatusLine(
-            "Sleep",
-            when {
-                sleepStart != null -> "asleep for ${formatDuration((now - sleepStart) / 1000)}"
-                lastSleep != null -> "awake for ${formatDuration((now - lastSleep.endTime) / 1000)}"
-                else -> "—"
-            },
-        )
-    }
-}
-
-@Composable
 private fun StatusLine(label: String, value: String) {
     Row {
         Text(label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(96.dp))
@@ -288,9 +274,35 @@ private fun LiveSleepCard(sleepStart: Long, onWokeUp: () -> Unit, onCancel: () -
 }
 
 @Composable
-private fun TodaySummaryCard(day: DayData, onOpenDetail: (Category) -> Unit) {
+private fun TodaySummaryCard(
+    day: DayData,
+    lastFeeding: Feeding?,
+    lastBreast: Feeding?,
+    lastSleep: Sleep?,
+    sleepStart: Long?,
+    onOpenDetail: (Category) -> Unit,
+) {
     val s = day.summary
+    val now by rememberNow(30_000)
     SectionCard(title = "Today so far", icon = Icons.Outlined.Assessment) {
+        StatusLine(
+            "Last feed",
+            lastFeeding?.let { f ->
+                val what = if (f.type == FeedingType.BREAST) "breast, ${formatDuration(f.totalSeconds.toLong())}"
+                else "bottle, ${f.amountMl ?: 0} ml"
+                "${formatAgo(f.startTime, now)} ($what)"
+            } ?: "—",
+        )
+        StatusLine("Next side", StatsCalculator.suggestedSide(lastBreast).label)
+        StatusLine(
+            "Sleep",
+            when {
+                sleepStart != null -> "asleep for ${formatDuration((now - sleepStart) / 1000)}"
+                lastSleep != null -> "awake for ${formatDuration((now - lastSleep.endTime) / 1000)}"
+                else -> "—"
+            },
+        )
+        HorizontalDivider()
         SummaryLine("Feeds", "${s.feeds}", "${s.breastFeeds} breast · ${s.bottleFeeds} bottle") { onOpenDetail(Category.FEEDS) }
         SummaryLine(
             "Breast",

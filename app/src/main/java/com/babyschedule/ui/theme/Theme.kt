@@ -52,7 +52,9 @@ object SeriesColors {
 @Composable
 fun BabyScheduleTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    // Off so the app always uses its own primary/secondary colours (the phone's
+    // wallpaper colours can make primary and secondary buttons look the same).
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val colors = when {

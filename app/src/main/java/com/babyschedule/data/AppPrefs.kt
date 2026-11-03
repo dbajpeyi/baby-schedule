@@ -131,6 +131,15 @@ class AppPrefs(context: Context) {
         _sleepAlert.value = a
     }
 
+    private val _confetti = MutableStateFlow(sp.getBoolean(K_CONFETTI, true))
+    /** Play confetti when a new session is saved. */
+    val confetti: StateFlow<Boolean> = _confetti.asStateFlow()
+
+    fun setConfetti(on: Boolean) {
+        sp.edit().putBoolean(K_CONFETTI, on).apply()
+        _confetti.value = on
+    }
+
     /** The sleep start for which the alert was already shown (to avoid repeats). */
     var sleepAlertShownFor: Long
         get() = sp.getLong(K_ALERT_SHOWN_FOR, 0L)
@@ -205,6 +214,7 @@ class AppPrefs(context: Context) {
         const val K_SLEEP_START = "sleep_start"
         const val K_SLEEP_SESSION = "sleep_session"
         const val K_ALERT_ON = "sleep_alert_on"
+        const val K_CONFETTI = "confetti"
         const val K_ALERT_MINUTES = "sleep_alert_minutes"
         const val K_ALERT_SHOWN_FOR = "sleep_alert_shown_for"
         const val K_T_START = "timer_start"

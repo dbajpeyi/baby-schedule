@@ -1,4 +1,9 @@
 <resources>
     <color name="splash_background">#FFFFF8F6</color>
     <color name="ic_launcher_background">#FFF8BBD0</color>
+    <color name="widget_background">#FFFFF8F8</color>
+    <color name="widget_title">#FF8E4A6A</color>
+    <color name="widget_text">#FF3A2A31</color>
+    <color name="widget_button">#FF8E4A6A</color>
+    <color name="widget_button_text">#FFFFFFFF</color>
 </resources>

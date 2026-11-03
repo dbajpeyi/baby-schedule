@@ -85,6 +85,8 @@ class UiActions(
     val openSession: (Long) -> Unit,
     /** Opens the session form with a draft (new session, or one built from a live timer). */
     val editDraft: (SessionDraft) -> Unit,
+    /** Plays the confetti animation (if turned on in Settings). */
+    val celebrate: () -> Unit = {},
 ) {
     /** Opens the right editor for a log entry: its session if it has one, otherwise its own form. */
     fun open(event: TimelineEvent) {
