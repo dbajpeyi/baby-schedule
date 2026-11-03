@@ -248,8 +248,8 @@ private fun ReviewSession(
     var weightAfter by rememberSaveable { mutableStateOf("") }
     var diaperChanged by rememberSaveable { mutableStateOf(false) }
     var diaperType by rememberSaveable { mutableStateOf(DiaperType.MIXED) }
-    var color by rememberSaveable { mutableStateOf("") }
     var amount by rememberSaveable { mutableStateOf("") }
+    var diaperNotes by rememberSaveable { mutableStateOf("") }
     var notes by rememberSaveable { mutableStateOf("") }
     var confirmDiscard by rememberSaveable { mutableStateOf(false) }
     val start = timer.sessionStart ?: now
@@ -278,7 +278,13 @@ private fun ReviewSession(
     Text("Diaper changed?", style = MaterialTheme.typography.titleMedium)
     ChoiceChips(listOf(false, true), diaperChanged, { if (it) "Yes" else "No" }, { diaperChanged = it })
     if (diaperChanged) {
-        DiaperFields(diaperType, { diaperType = it }, color, { color = it }, amount, { amount = it })
+        DiaperFields(diaperType, { diaperType = it }, amount, { amount = it })
+        OutlinedTextField(
+            value = diaperNotes,
+            onValueChange = { diaperNotes = it },
+            label = { Text("Diaper notes (e.g. colour)") },
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 
     OutlinedTextField(
@@ -294,8 +300,8 @@ private fun ReviewSession(
                 Diaper(
                     time = start,
                     type = diaperType,
-                    color = if (diaperType != DiaperType.WET) color else "",
                     amount = amount,
+                    notes = diaperNotes.trim(),
                 )
             } else null
             onSave(after, diaper, notes)

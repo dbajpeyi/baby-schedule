@@ -18,7 +18,6 @@ enum class DiaperType(val label: String) { WET("Pee"), DIRTY("Poop"), MIXED("Pee
 
 /** Simple choices for diaper details; stored as plain text so they stay readable. */
 object DiaperOptions {
-    val colors = listOf("Yellow", "Yellow-green", "Green", "Brown", "Black")
     val amounts = listOf("Little", "Normal", "Lots")
 }
 
@@ -79,7 +78,7 @@ data class Diaper(
     val time: Long,
     val type: DiaperType,
     val notes: String = "",
-    /** Poop colour, one of [DiaperOptions.colors] or empty. */
+    /** Unused (colour is written in notes); kept for database compatibility. */
     val color: String = "",
     /** One of [DiaperOptions.amounts] or empty. */
     val amount: String = "",

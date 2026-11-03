@@ -84,8 +84,8 @@ shot 05-feeding-right
 tap "End feeding"
 tap "Weight after" && type_text "2620"
 tap "Yes"
-tap "Yellow-green"
 tap "Lots"
+tap "Diaper notes (e.g. colour)" && type_text "yellow-green"
 shot 06-review-feeding
 tap "Save feeding"
 sleep 1

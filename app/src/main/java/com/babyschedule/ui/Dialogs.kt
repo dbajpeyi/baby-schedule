@@ -445,7 +445,6 @@ fun DiaperDialog(
 ) {
     var time by remember { mutableLongStateOf(initial.time) }
     var type by remember { mutableStateOf(initial.type) }
-    var color by remember { mutableStateOf(initial.color) }
     var amount by remember { mutableStateOf(initial.amount) }
     var notes by remember { mutableStateOf(initial.notes) }
     EntryDialog(
@@ -453,14 +452,16 @@ fun DiaperDialog(
         onDismiss = onDismiss,
         saveEnabled = true,
         onDelete = onDelete,
-        onSave = {
-            val hasPoop = type != DiaperType.WET
-            onSave(initial.copy(time = time, type = type, color = if (hasPoop) color else "", amount = amount, notes = notes.trim()))
-        },
+        onSave = { onSave(initial.copy(time = time, type = type, amount = amount, notes = notes.trim())) },
     ) {
         DateTimeField("Time", time) { time = it }
-        DiaperFields(type, { type = it }, color, { color = it }, amount, { amount = it })
-        NotesField(notes) { notes = it }
+        DiaperFields(type, { type = it }, amount, { amount = it })
+        OutlinedTextField(
+            value = notes,
+            onValueChange = { notes = it },
+            label = { Text("Notes (e.g. colour)") },
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
@@ -680,21 +681,15 @@ fun SettingsDialog(
     )
 }
 
-/** Pee/poop, poop colour and amount. Colour only shows when there is poop. */
+/** Pee/poop and amount; anything else (like colour) goes in the notes. */
 @Composable
 fun DiaperFields(
     type: DiaperType,
     onType: (DiaperType) -> Unit,
-    color: String,
-    onColor: (String) -> Unit,
     amount: String,
     onAmount: (String) -> Unit,
 ) {
     ChoiceChips(DiaperType.entries, type, { it.label }, onType)
-    if (type != DiaperType.WET) {
-        Text("Poop colour", style = MaterialTheme.typography.labelMedium)
-        OptionChips(DiaperOptions.colors, color, onColor)
-    }
     Text("Amount", style = MaterialTheme.typography.labelMedium)
     OptionChips(DiaperOptions.amounts, amount, onAmount)
 }

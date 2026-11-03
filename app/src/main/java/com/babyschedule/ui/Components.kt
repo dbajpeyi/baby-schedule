@@ -344,7 +344,7 @@ private fun TimelineEvent.look(): EventLook = when (this) {
                 "Breastfeeding · ${formatDuration(f.totalSeconds.toLong())}",
                 sideLines + listOfNotNull(
                     weightLine(f),
-                    diaper?.let { "Diaper: ${diaperSummary(it)}" },
+                    diaper?.let { d -> "Diaper: ${diaperSummary(d)}" + if (d.notes.isNotBlank()) " · ${d.notes}" else "" },
                     f.notes.takeIf { it.isNotBlank() },
                 ),
                 "${formatTime(f.startTime)} – ${formatTime(f.endTime)}",
