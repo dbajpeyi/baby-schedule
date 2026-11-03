@@ -10,12 +10,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.Assessment
+import androidx.compose.material.icons.outlined.CheckBox
+import androidx.compose.material.icons.outlined.EditCalendar
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -95,6 +99,8 @@ fun TodayScreen(
                 onClick = { ui.editDraft(SessionDraft.new(System.currentTimeMillis())) },
                 modifier = Modifier.fillMaxWidth().height(72.dp),
             ) {
+                Icon(Icons.Outlined.EditCalendar, contentDescription = null, modifier = Modifier.size(28.dp))
+                Spacer(Modifier.width(12.dp))
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Log a session", style = MaterialTheme.typography.titleLarge)
                     Text("Diaper, feeding, weights, sleep", style = MaterialTheme.typography.bodySmall)
@@ -125,7 +131,7 @@ fun TodayScreen(
 
         // Secondary: start live timers / add single entries.
         item {
-            SectionCard(title = "Live timers") {
+            SectionCard(title = "Live timers", icon = Icons.Outlined.Timer) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (!timer.isActive) {
                         OutlinedButton(onClick = onOpenFeeding, modifier = Modifier.weight(1f)) { Text("Feeding timer") }
@@ -150,7 +156,7 @@ fun TodayScreen(
                 onClick = { ui.openDialog(DialogRequest.AddMenu(System.currentTimeMillis())) },
                 modifier = Modifier.fillMaxWidth().height(48.dp),
             ) {
-                Icon(Icons.Filled.Add, contentDescription = null)
+                Icon(Icons.Outlined.CheckBox, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text("Add a single entry (e.g. bottle)", maxLines = 1)
             }
@@ -284,7 +290,7 @@ private fun LiveSleepCard(sleepStart: Long, onWokeUp: () -> Unit, onCancel: () -
 @Composable
 private fun TodaySummaryCard(day: DayData, onOpenDetail: (Category) -> Unit) {
     val s = day.summary
-    SectionCard(title = "Today so far") {
+    SectionCard(title = "Today so far", icon = Icons.Outlined.Assessment) {
         SummaryLine("Feeds", "${s.feeds}", "${s.breastFeeds} breast · ${s.bottleFeeds} bottle") { onOpenDetail(Category.FEEDS) }
         SummaryLine(
             "Breast",

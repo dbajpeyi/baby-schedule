@@ -144,6 +144,7 @@ fun rememberNow(intervalMs: Long = 1_000): State<Long> =
 fun SectionCard(
     title: String?,
     modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
     action: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -154,6 +155,10 @@ fun SectionCard(
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (title != null || action != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (icon != null) {
+                        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(8.dp))
+                    }
                     if (title != null) {
                         Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                     } else {
