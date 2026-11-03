@@ -15,13 +15,28 @@ A simple Android app for tracking a newborn's day. It's built to be quick to use
 
 Everything is stored on the phone (Room database). Android's automatic backup includes it.
 
-## Getting the APK
+## Download
 
-Every push runs the **Build APK** GitHub Actions workflow. To download the app:
+Download the latest APK (no GitHub sign-in needed):
 
-1. Open the latest workflow run under **Actions**.
-2. Download the `baby-schedule-apk` artifact.
-3. Install `app-release.apk` on the phone. You may need to allow "Install unknown apps".
+**https://github.com/dbajpeyi/baby-schedule/releases/latest/download/baby-schedule.apk**
+
+Open it on your Android phone and allow "Install unknown apps" if asked. Every push to the main branch publishes a new release. Each release installs over the previous one and keeps your data.
+
+### One-time setup: release signing key
+
+Releases are only published once a signing key is stored in GitHub secrets. Using one fixed key means every new version installs over the old one and keeps your data. Create the key on your own computer. It never goes into the repo.
+
+```bash
+keytool -genkeypair -keystore baby-schedule.keystore -alias babyschedule -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Baby Schedule"
+```
+
+Then add two repository secrets under **Settings → Secrets and variables → Actions**:
+
+- `KEYSTORE_BASE64`: the output of `base64 -i baby-schedule.keystore` (macOS) or `base64 -w0 baby-schedule.keystore` (Linux)
+- `KEYSTORE_PASSWORD`: the password you chose
+
+Keep `baby-schedule.keystore` somewhere safe. If you lose it, future builds can't update the installed app.
 
 ## Building locally
 

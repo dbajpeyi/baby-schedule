@@ -13,8 +13,25 @@ android {
         applicationId = "com.babyschedule"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // CI builds get an increasing version so each release installs as an update.
+        val build = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionCode = build
+        versionName = "1.0.$build"
+    }
+
+    signingConfigs {
+        // Release key comes from the environment (GitHub secrets in CI) and is never
+        // committed. Using the same key for every build lets updates install over the
+        // previous version without losing data.
+        val keystore = System.getenv("KEYSTORE_FILE")
+        if (keystore != null) {
+            create("release") {
+                storeFile = file(keystore)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS") ?: "babyschedule"
+                keyPassword = System.getenv("KEY_PASSWORD") ?: System.getenv("KEYSTORE_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -22,9 +39,8 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Signed with the debug key so the release APK is installable out of the box.
-            // Replace with your own keystore before publishing to the Play Store.
-            signingConfig = signingConfigs.getByName("debug")
+            // Without a release key (e.g. local builds) fall back to the debug key.
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 
