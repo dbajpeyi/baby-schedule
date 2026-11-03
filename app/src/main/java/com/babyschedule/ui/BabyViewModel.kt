@@ -94,8 +94,8 @@ class BabyViewModel(
     val growthEntries: StateFlow<List<Growth>> = repo.allGrowth()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val growthSummary: StateFlow<GrowthSummary> = combine(repo.allGrowth(), profile) { g, p ->
-        StatsCalculator.growth(g, p)
+    val growthSummary: StateFlow<GrowthSummary> = combine(repo.allGrowth(), profile, repo.weighedFeedings()) { g, p, f ->
+        StatsCalculator.growth(g, p, f)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StatsCalculator.growth(emptyList(), Profile()))
 
     val lastFeeding: StateFlow<Feeding?> = repo.latestFeeding()
@@ -132,7 +132,8 @@ class BabyViewModel(
 
     private fun now() = System.currentTimeMillis()
 
-    fun startFeeding(side: Side) = repo.prefs.setTimer(FeedingTimer().tap(side, now()))
+    fun startFeeding(side: Side, weightBeforeGrams: Int?) =
+        repo.prefs.setTimer(FeedingTimer(weightBeforeGrams = weightBeforeGrams).tap(side, now()))
 
     /** Switches to the other breast (or starts the other one if paused). */
     fun switchSide() {
@@ -152,13 +153,15 @@ class BabyViewModel(
 
     data class SavedSession(val feedingId: Long, val diaperId: Long?, val previous: FeedingTimer)
 
-    /** Saves the current session (and an optional diaper change). */
-    suspend fun saveSession(diaper: DiaperType?, notes: String): SavedSession? {
+    /** Saves the current session, with weight after and an optional diaper change. */
+    suspend fun saveSession(weightAfterGrams: Int?, diaper: Diaper?, notes: String): SavedSession? {
         val previous = timer.value
-        val feeding = previous.toFeeding(now())?.copy(notes = notes.trim()) ?: return null
+        val feeding = previous.toFeeding(now())
+            ?.copy(notes = notes.trim(), weightAfterGrams = weightAfterGrams)
+            ?: return null
         repo.prefs.setTimer(FeedingTimer())
         val feedingId = repo.save(feeding)
-        val diaperId = diaper?.let { repo.save(Diaper(time = feeding.endTime, type = it)) }
+        val diaperId = diaper?.let { repo.save(it.copy(time = feeding.startTime, feedingId = feedingId)) }
         return SavedSession(feedingId, diaperId, previous)
     }
 

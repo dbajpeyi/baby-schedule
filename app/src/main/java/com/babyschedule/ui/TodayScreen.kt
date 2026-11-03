@@ -236,9 +236,14 @@ private fun TodaySummaryCard(day: DayData, onOpenDetail: (Category) -> Unit) {
     val s = day.summary
     SectionCard(title = "Today so far") {
         SummaryLine("Feeds", "${s.feeds}", "${s.breastFeeds} breast · ${s.bottleFeeds} bottle") { onOpenDetail(Category.FEEDS) }
-        SummaryLine("Breast", formatMinutes(s.breastMin), "Left ${formatMinutes(s.leftMin)} · Right ${formatMinutes(s.rightMin)}") { onOpenDetail(Category.BREAST) }
+        SummaryLine(
+            "Breast",
+            formatMinutes(s.breastMin),
+            "Left ${formatMinutes(s.leftMin)} · Right ${formatMinutes(s.rightMin)}" +
+                if (s.weighedFeeds > 0) " · drank ≈ ${s.breastIntakeG} g" else "",
+        ) { onOpenDetail(Category.BREAST) }
         if (s.bottleMl > 0) SummaryLine("Bottle", "${s.bottleMl} ml", null) { onOpenDetail(Category.BOTTLE) }
-        SummaryLine("Diapers", "${s.diapers}", "${s.wetTotal} wet · ${s.dirtyTotal} dirty") { onOpenDetail(Category.DIAPERS) }
+        SummaryLine("Diapers", "${s.diapers}", "${s.wetTotal} pee · ${s.dirtyTotal} poop") { onOpenDetail(Category.DIAPERS) }
         SummaryLine("Sleep", formatMinutes(s.sleepMin), null) { onOpenDetail(Category.SLEEP) }
     }
 }

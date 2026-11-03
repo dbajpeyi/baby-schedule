@@ -15,6 +15,9 @@ interface FeedingDao {
     @Query("SELECT * FROM feedings ORDER BY startTime DESC LIMIT 1")
     fun latest(): Flow<Feeding?>
 
+    @Query("SELECT * FROM feedings WHERE weightBeforeGrams IS NOT NULL ORDER BY startTime ASC")
+    fun weighed(): Flow<List<Feeding>>
+
     @Query("SELECT * FROM feedings WHERE type = 'BREAST' ORDER BY startTime DESC LIMIT 1")
     fun latestBreast(): Flow<Feeding?>
 

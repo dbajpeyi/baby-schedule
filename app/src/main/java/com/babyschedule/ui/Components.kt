@@ -59,12 +59,14 @@ import com.babyschedule.data.Growth
 import com.babyschedule.data.MilkType
 import com.babyschedule.data.Sleep
 import com.babyschedule.data.durationMs
+import com.babyschedule.data.segmentList
 import com.babyschedule.data.totalSeconds
 import com.babyschedule.ui.theme.SeriesColors
 import com.babyschedule.util.formatDuration
 import com.babyschedule.util.formatNumber
 import com.babyschedule.util.formatTime
 import com.babyschedule.util.formatWeight
+import com.babyschedule.util.formatWeightChange
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -218,6 +220,21 @@ fun <T> ChoiceChips(
     }
 }
 
+/** Optional single choice: tapping the selected chip clears it (empty string). */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun OptionChips(options: List<String>, selected: String, onSelect: (String) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        options.forEach { option ->
+            FilterChip(
+                selected = option == selected,
+                onClick = { onSelect(if (option == selected) "" else option) },
+                label = { Text(option) },
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun Legend(items: List<Pair<String, Color>>) {
@@ -241,7 +258,8 @@ sealed interface TimelineEvent {
     val key: String
     val item: Any
 
-    data class FeedingEvent(val feeding: Feeding) : TimelineEvent {
+    /** A feed; [diaper] is a change logged as part of the same session. */
+    data class FeedingEvent(val feeding: Feeding, val diaper: Diaper? = null) : TimelineEvent {
         override val time get() = feeding.startTime
         override val key get() = "f${feeding.id}"
         override val item: Any get() = feeding
@@ -267,8 +285,12 @@ sealed interface TimelineEvent {
 }
 
 fun DayData.timeline(): List<TimelineEvent> = buildList {
-    feedings.forEach { add(TimelineEvent.FeedingEvent(it)) }
-    diapers.forEach { add(TimelineEvent.DiaperEvent(it)) }
+    val feedingIds = feedings.map { it.id }.toSet()
+    val sessionDiapers = diapers.filter { it.feedingId != null && it.feedingId in feedingIds }
+        .associateBy { it.feedingId }
+    feedings.forEach { add(TimelineEvent.FeedingEvent(it, sessionDiapers[it.id])) }
+    diapers.filter { it.feedingId == null || it.feedingId !in feedingIds }
+        .forEach { add(TimelineEvent.DiaperEvent(it)) }
     sleeps.forEach { add(TimelineEvent.SleepEvent(it)) }
     growth.forEach { add(TimelineEvent.GrowthEvent(it)) }
 }.sortedByDescending { it.time }
@@ -284,30 +306,54 @@ private data class EventLook(
     val icon: ImageVector,
     val color: Color,
     val title: String,
-    val detail: String,
+    val lines: List<String>,
     val timeText: String,
 )
+
+fun diaperSummary(d: Diaper): String =
+    listOf(d.type.label, d.color, d.amount).filter { it.isNotBlank() }.joinToString(" · ")
+
+private fun weightLine(f: Feeding): String? {
+    val before = f.weightBeforeGrams
+    val after = f.weightAfterGrams
+    return when {
+        before != null && after != null -> "Weight ${formatWeight(before)} → ${formatWeight(after)} (${formatWeightChange(after - before)})"
+        before != null -> "Weight before ${formatWeight(before)}"
+        after != null -> "Weight after ${formatWeight(after)}"
+        else -> null
+    }
+}
 
 private fun TimelineEvent.look(): EventLook = when (this) {
     is TimelineEvent.FeedingEvent -> {
         val f = feeding
         if (f.type == FeedingType.BREAST) {
-            val parts = buildList {
-                if (f.leftSeconds > 0) add("L ${formatDuration(f.leftSeconds.toLong())}")
-                if (f.rightSeconds > 0) add("R ${formatDuration(f.rightSeconds.toLong())}")
+            val segments = f.segmentList
+            val sideLines = if (segments.isNotEmpty()) {
+                segments.map { "${it.side.label} ${formatTime(it.start)} – ${formatTime(it.end)} (${formatDuration(it.durationMs / 1000)})" }
+            } else {
+                listOf(
+                    buildList {
+                        if (f.leftSeconds > 0) add("Left ${formatDuration(f.leftSeconds.toLong())}")
+                        if (f.rightSeconds > 0) add("Right ${formatDuration(f.rightSeconds.toLong())}")
+                    }.joinToString(" · ")
+                )
             }
-            val first = f.firstSide?.let { " · started ${it.label.lowercase()}" } ?: ""
             EventLook(
                 Icons.Filled.ChildCare, SeriesColors.Left,
                 "Breastfeeding · ${formatDuration(f.totalSeconds.toLong())}",
-                parts.joinToString("  ") + first + notesSuffix(f.notes),
+                sideLines + listOfNotNull(
+                    weightLine(f),
+                    diaper?.let { "Diaper: ${diaperSummary(it)}" },
+                    f.notes.takeIf { it.isNotBlank() },
+                ),
                 "${formatTime(f.startTime)} – ${formatTime(f.endTime)}",
             )
         } else {
             EventLook(
                 Icons.Filled.LocalDrink, SeriesColors.Bottle,
                 "Bottle · ${f.amountMl ?: 0} ml",
-                (f.milkType ?: MilkType.FORMULA).label + notesSuffix(f.notes),
+                listOfNotNull((f.milkType ?: MilkType.FORMULA).label, f.notes.takeIf { it.isNotBlank() }),
                 formatTime(f.startTime),
             )
         }
@@ -319,29 +365,29 @@ private fun TimelineEvent.look(): EventLook = when (this) {
             DiaperType.DIRTY -> SeriesColors.Dirty
             DiaperType.MIXED -> SeriesColors.Mixed
         },
-        "Diaper · ${diaper.type.label}",
-        diaper.notes,
+        "Diaper · ${diaperSummary(diaper)}",
+        listOfNotNull(diaper.notes.takeIf { it.isNotBlank() }),
         formatTime(diaper.time),
     )
     is TimelineEvent.SleepEvent -> EventLook(
         Icons.Filled.Bedtime, SeriesColors.Sleep,
         "Sleep · ${formatDuration(sleep.durationMs / 1000)}",
-        sleep.notes,
+        listOfNotNull(sleep.notes.takeIf { it.isNotBlank() }),
         "${formatTime(sleep.startTime)} – ${formatTime(sleep.endTime)}",
     )
     is TimelineEvent.GrowthEvent -> EventLook(
         Icons.Filled.MonitorWeight, SeriesColors.Weight,
         growth.weightGrams?.let { "Weight · ${formatWeight(it)}" } ?: "Measurement",
         listOfNotNull(
-            growth.lengthCm?.let { "Length ${formatNumber(it)} cm" },
-            growth.headCm?.let { "Head ${formatNumber(it)} cm" },
+            listOfNotNull(
+                growth.lengthCm?.let { "Length ${formatNumber(it)} cm" },
+                growth.headCm?.let { "Head ${formatNumber(it)} cm" },
+            ).joinToString(" · ").takeIf { it.isNotBlank() },
             growth.notes.takeIf { it.isNotBlank() },
-        ).joinToString(" · "),
+        ),
         formatTime(growth.time),
     )
 }
-
-private fun notesSuffix(notes: String) = if (notes.isBlank()) "" else " · $notes"
 
 @Composable
 fun TimelineRow(event: TimelineEvent, onClick: () -> Unit) {
@@ -352,7 +398,7 @@ fun TimelineRow(event: TimelineEvent, onClick: () -> Unit) {
             .clip(MaterialTheme.shapes.medium)
             .clickable(onClick = onClick)
             .padding(horizontal = 4.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
     ) {
         Box(
             Modifier.size(40.dp).clip(CircleShape).background(look.color.copy(alpha = 0.18f)),
@@ -363,10 +409,10 @@ fun TimelineRow(event: TimelineEvent, onClick: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(look.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-            if (look.detail.isNotBlank()) {
+            look.lines.filter { it.isNotBlank() }.forEach { line ->
                 Text(
-                    look.detail,
-                    style = MaterialTheme.typography.bodySmall,
+                    line,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,

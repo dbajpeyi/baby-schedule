@@ -91,7 +91,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.statsContent(s: Stats
                 { m ->
                     StatTile(
                         "Diapers", formatNumber(s.avgDiapersPerDay), m,
-                        sub = "${formatNumber(s.avgWetPerDay)} wet · ${formatNumber(s.avgDirtyPerDay)} dirty",
+                        sub = "${formatNumber(s.avgWetPerDay)} pee · ${formatNumber(s.avgDirtyPerDay)} poop",
                         accent = SeriesColors.Wet,
                     )
                 },
@@ -138,7 +138,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.statsContent(s: Stats
 
     item {
         SectionCard(title = "Diapers per day") {
-            Legend(listOf("Wet" to SeriesColors.Wet, "Dirty" to SeriesColors.Dirty, "Both" to SeriesColors.Mixed))
+            Legend(listOf("Pee" to SeriesColors.Wet, "Poop" to SeriesColors.Dirty, "Pee + poop" to SeriesColors.Mixed))
             StackedBarChart(
                 labels = labels,
                 values = s.days.map { listOf(it.wet.toFloat(), it.dirty.toFloat(), it.mixed.toFloat()) },

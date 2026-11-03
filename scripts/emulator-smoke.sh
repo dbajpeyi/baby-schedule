@@ -73,6 +73,7 @@ tap "Save"
 # Breastfeeding session: start on left, switch, end, review, save
 to_top
 tap "Start breastfeeding"
+tap "Weight before" && type_text "2575"
 shot 03-choose-side
 tap "Left"
 sleep 4
@@ -81,7 +82,10 @@ tap "Switch to Right"
 sleep 3
 shot 05-feeding-right
 tap "End feeding"
-tap "Wet"
+tap "Weight after" && type_text "2620"
+tap "Yes"
+tap "Yellow-green"
+tap "Lots"
 shot 06-review-feeding
 tap "Save feeding"
 sleep 1
@@ -93,10 +97,10 @@ shot 08-add-menu
 tap "Bottle feed" && tap "Amount" && type_text "90"
 tap "Save"
 tap "Add bottle, diaper, sleep or weight"
-tap "Diaper" && tap "Wet + dirty"
+tap "Diaper" && tap "Poop"
 tap "Save"
 tap "Add bottle, diaper, sleep or weight"
-tap "Weight / growth" && tap "Weight" && type_text "3.55"
+tap "Weight / growth" && tap "Weight" && type_text "2650"
 tap "Save"
 
 # Sleep (may trigger the notification permission prompt on Android 13+)
@@ -133,7 +137,7 @@ shot 17-growth
 
 # Edit an entry from History
 tap "History"
-tap "Diaper · Wet"
+tap "Diaper · Poop"
 shot 18-edit-diaper
 tap "Cancel"
 

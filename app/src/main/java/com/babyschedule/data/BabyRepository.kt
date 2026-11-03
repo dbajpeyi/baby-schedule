@@ -13,6 +13,7 @@ class BabyRepository(db: AppDatabase, val prefs: AppPrefs) {
     fun sleeps(from: Long, to: Long): Flow<List<Sleep>> = sleeps.overlapping(from, to)
     fun growth(from: Long, to: Long): Flow<List<Growth>> = growth.between(from, to)
     fun allGrowth(): Flow<List<Growth>> = growth.all()
+    fun weighedFeedings(): Flow<List<Feeding>> = feedings.weighed()
 
     fun latestFeeding(): Flow<Feeding?> = feedings.latest()
     fun latestBreastFeeding(): Flow<Feeding?> = feedings.latestBreast()

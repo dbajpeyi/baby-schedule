@@ -27,6 +27,9 @@ data class FeedingTimer(
     val rightMs: Long = 0,
     val firstSide: Side? = null,
     val lastSide: Side? = null,
+    /** Finished stretches on each side, oldest first (the running one is not included). */
+    val segments: List<Segment> = emptyList(),
+    val weightBeforeGrams: Int? = null,
 ) {
     val isActive: Boolean get() = sessionStart != null
     val isRunning: Boolean get() = activeSide != null
@@ -39,11 +42,19 @@ data class FeedingTimer(
     fun sideAt(side: Side, now: Long): Long = if (side == Side.LEFT) leftAt(now) else rightAt(now)
     fun totalAt(now: Long): Long = leftAt(now) + rightAt(now)
 
-    /** Moves the running segment into the per-side totals. */
+    /** All segments including the one running now. */
+    fun segmentsAt(now: Long): List<Segment> {
+        val side = activeSide ?: return segments
+        if (now <= segmentStart) return segments
+        return segments + Segment(side, segmentStart, now)
+    }
+
+    /** Moves the running segment into the per-side totals and the segment list. */
     private fun settle(now: Long): FeedingTimer = copy(
         leftMs = leftAt(now),
         rightMs = rightAt(now),
         segmentStart = now,
+        segments = segmentsAt(now),
     )
 
     /** Tap a side: start it, switch to it, or pause it if it is already running. */
@@ -84,6 +95,8 @@ data class FeedingTimer(
             rightSeconds = right,
             firstSide = firstSide,
             lastSide = lastSide,
+            weightBeforeGrams = weightBeforeGrams,
+            segments = Segments.encode(segmentsAt(now)),
         )
     }
 }
@@ -139,6 +152,8 @@ class AppPrefs(context: Context) {
             .putLong(K_T_RIGHT, t.rightMs)
             .putString(K_T_FIRST, t.firstSide?.name)
             .putString(K_T_LAST, t.lastSide?.name)
+            .putString(K_T_SEGMENTS, Segments.encode(t.segments))
+            .putLongOrRemove(K_T_WEIGHT, t.weightBeforeGrams?.toLong())
             .apply()
         _timer.value = t
     }
@@ -162,6 +177,8 @@ class AppPrefs(context: Context) {
         rightMs = sp.getLong(K_T_RIGHT, 0),
         firstSide = sp.sideOrNull(K_T_FIRST),
         lastSide = sp.sideOrNull(K_T_LAST),
+        segments = Segments.decode(sp.getString(K_T_SEGMENTS, "") ?: ""),
+        weightBeforeGrams = sp.longOrNull(K_T_WEIGHT)?.toInt(),
     )
 
     private fun SharedPreferences.longOrNull(key: String): Long? =
@@ -188,5 +205,7 @@ class AppPrefs(context: Context) {
         const val K_T_RIGHT = "timer_right"
         const val K_T_FIRST = "timer_first"
         const val K_T_LAST = "timer_last"
+        const val K_T_SEGMENTS = "timer_segments"
+        const val K_T_WEIGHT = "timer_weight_before"
     }
 }

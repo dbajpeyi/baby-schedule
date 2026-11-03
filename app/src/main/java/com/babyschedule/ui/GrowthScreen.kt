@@ -98,17 +98,21 @@ fun GrowthScreen(vm: BabyViewModel, ui: UiActions) {
 
         if (summary.points.isNotEmpty()) {
             item {
-                SectionCard(title = "Weight (kg)") {
+                SectionCard(title = "Weight (g)") {
                     TimeLineChart(
-                        points = summary.points.map { it.time to it.grams / 1000f },
+                        points = summary.points.map { it.time to it.grams.toFloat() },
                         color = SeriesColors.Weight,
-                        yFormat = { String.format(Locale.getDefault(), "%.2f", it) },
+                        yFormat = { it.roundToInt().toString() },
                         xFormat = { formatAxisDate(toLocalDate(it)) },
                         highlightFirst = summary.points.first().isBirth,
                     )
-                    if (summary.points.first().isBirth) {
+                    val notes = listOfNotNull(
+                        "Circled point is birth weight.".takeIf { summary.points.first().isBirth },
+                        "Includes weights taken before feeds.".takeIf { summary.points.any { it.fromFeeding } },
+                    )
+                    if (notes.isNotEmpty()) {
                         Text(
-                            "Circled point is birth weight.",
+                            notes.joinToString(" "),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

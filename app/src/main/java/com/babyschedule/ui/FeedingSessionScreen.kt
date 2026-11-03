@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -38,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.babyschedule.data.Diaper
 import com.babyschedule.data.DiaperType
 import com.babyschedule.data.FeedingTimer
 import com.babyschedule.data.Side
@@ -46,6 +48,8 @@ import com.babyschedule.ui.theme.SeriesColors
 import com.babyschedule.util.formatClock
 import com.babyschedule.util.formatDuration
 import com.babyschedule.util.formatTime
+import com.babyschedule.util.formatWeight
+import com.babyschedule.util.formatWeightChange
 
 private fun sideColor(side: Side) = if (side == Side.LEFT) SeriesColors.Left else SeriesColors.Right
 
@@ -86,7 +90,7 @@ fun FeedingSessionScreen(vm: BabyViewModel, ui: UiActions, onClose: () -> Unit) 
             when {
                 !timer.isActive -> ChooseSide(
                     suggested = StatsCalculator.suggestedSide(lastBreast),
-                    onChoose = vm::startFeeding,
+                    onChoose = { side, weight -> vm.startFeeding(side, weight) },
                 )
                 !reviewing -> RunningSession(
                     timer = timer,
@@ -100,9 +104,9 @@ fun FeedingSessionScreen(vm: BabyViewModel, ui: UiActions, onClose: () -> Unit) 
                 )
                 else -> ReviewSession(
                     timer = timer,
-                    onSave = { diaper, notes ->
+                    onSave = { weightAfter, diaper, notes ->
                         ui.launch {
-                            val saved = vm.saveSession(diaper, notes)
+                            val saved = vm.saveSession(weightAfter, diaper, notes)
                             reviewing = false
                             onClose()
                             if (saved != null) ui.undoable("Feeding saved") { vm.undoSession(saved) }
@@ -125,8 +129,12 @@ fun FeedingSessionScreen(vm: BabyViewModel, ui: UiActions, onClose: () -> Unit) 
 }
 
 @Composable
-private fun ChooseSide(suggested: Side, onChoose: (Side) -> Unit) {
-    Text("Which side are you starting on?", style = MaterialTheme.typography.headlineSmall)
+private fun ChooseSide(suggested: Side, onChoose: (Side, Int?) -> Unit) {
+    var weightBefore by rememberSaveable { mutableStateOf("") }
+    Text("Weight before feeding (optional)", style = MaterialTheme.typography.titleMedium)
+    NumberField(weightBefore, { weightBefore = it }, "Weight before", "g", decimal = false)
+    Spacer(Modifier.height(8.dp))
+    Text("Which side are you starting on?", style = MaterialTheme.typography.titleMedium)
     Text(
         "Suggested: ${suggested.label} (based on the last feed)",
         style = MaterialTheme.typography.bodyLarge,
@@ -136,7 +144,7 @@ private fun ChooseSide(suggested: Side, onChoose: (Side) -> Unit) {
         Side.entries.forEach { side ->
             val isSuggested = side == suggested
             Surface(
-                onClick = { onChoose(side) },
+                onClick = { onChoose(side, weightBefore.toIntOrNull()?.takeIf { it > 0 }) },
                 modifier = Modifier.weight(1f).height(140.dp),
                 shape = MaterialTheme.shapes.large,
                 color = if (isSuggested) sideColor(side).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -207,6 +215,8 @@ private fun RunningSession(
         }
     }
 
+    SessionTimeline(timer, now)
+
     Button(onClick = onSwitch, modifier = Modifier.fillMaxWidth().height(64.dp)) {
         Text("Switch to ${current.other().label}", style = MaterialTheme.typography.titleMedium)
     }
@@ -230,33 +240,47 @@ private fun RunningSession(
 @Composable
 private fun ReviewSession(
     timer: FeedingTimer,
-    onSave: (DiaperType?, String) -> Unit,
+    onSave: (Int?, Diaper?, String) -> Unit,
     onContinue: () -> Unit,
     onDiscard: () -> Unit,
 ) {
     val now by rememberNow()
-    var diaper by rememberSaveable { mutableStateOf<DiaperType?>(null) }
+    var weightAfter by rememberSaveable { mutableStateOf("") }
+    var diaperChanged by rememberSaveable { mutableStateOf(false) }
+    var diaperType by rememberSaveable { mutableStateOf(DiaperType.MIXED) }
+    var color by rememberSaveable { mutableStateOf("") }
+    var amount by rememberSaveable { mutableStateOf("") }
     var notes by rememberSaveable { mutableStateOf("") }
     var confirmDiscard by rememberSaveable { mutableStateOf(false) }
     val start = timer.sessionStart ?: now
     val end = timer.endTime(now)
+    val before = timer.weightBeforeGrams
+    val after = weightAfter.toIntOrNull()?.takeIf { it > 0 }
 
-    SectionCard(title = null) {
-        ReviewRow("Time", "${formatTime(start)} – ${formatTime(end)}")
+    SectionCard(title = "${formatTime(start)} – ${formatTime(end)} · ${formatDuration(timer.totalAt(now) / 1000)}") {
+        SessionTimeline(timer, now)
         HorizontalDivider()
-        ReviewRow("Left", formatDuration(timer.leftAt(now) / 1000))
-        ReviewRow("Right", formatDuration(timer.rightAt(now) / 1000))
-        HorizontalDivider()
-        ReviewRow("Total", formatDuration(timer.totalAt(now) / 1000), bold = true)
+        ReviewRow("Left total", formatDuration(timer.leftAt(now) / 1000))
+        ReviewRow("Right total", formatDuration(timer.rightAt(now) / 1000))
+        if (before != null) ReviewRow("Weight before", formatWeight(before))
     }
 
-    Text("Diaper changed too?", style = MaterialTheme.typography.titleMedium)
-    ChoiceChips(
-        options = listOf(null, DiaperType.WET, DiaperType.DIRTY, DiaperType.MIXED),
-        selected = diaper,
-        label = { it?.label ?: "No" },
-        onSelect = { diaper = it },
-    )
+    Text("Weight after feeding (optional)", style = MaterialTheme.typography.titleMedium)
+    NumberField(weightAfter, { weightAfter = it }, "Weight after", "g", decimal = false)
+    if (before != null && after != null) {
+        Text(
+            "Drank ≈ ${formatWeightChange(after - before)}",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
+
+    Text("Diaper changed?", style = MaterialTheme.typography.titleMedium)
+    ChoiceChips(listOf(false, true), diaperChanged, { if (it) "Yes" else "No" }, { diaperChanged = it })
+    if (diaperChanged) {
+        DiaperFields(diaperType, { diaperType = it }, color, { color = it }, amount, { amount = it })
+    }
+
     OutlinedTextField(
         value = notes,
         onValueChange = { notes = it },
@@ -264,7 +288,20 @@ private fun ReviewSession(
         modifier = Modifier.fillMaxWidth(),
     )
 
-    Button(onClick = { onSave(diaper, notes) }, modifier = Modifier.fillMaxWidth().height(64.dp)) {
+    Button(
+        onClick = {
+            val diaper = if (diaperChanged) {
+                Diaper(
+                    time = start,
+                    type = diaperType,
+                    color = if (diaperType != DiaperType.WET) color else "",
+                    amount = amount,
+                )
+            } else null
+            onSave(after, diaper, notes)
+        },
+        modifier = Modifier.fillMaxWidth().height(64.dp),
+    ) {
         Text("Save feeding", style = MaterialTheme.typography.titleMedium)
     }
     OutlinedButton(onClick = onContinue, modifier = Modifier.fillMaxWidth().height(56.dp)) {
@@ -282,6 +319,33 @@ private fun ReviewSession(
             confirmButton = { TextButton(onClick = { confirmDiscard = false; onDiscard() }) { Text("Discard") } },
             dismissButton = { TextButton(onClick = { confirmDiscard = false }) { Text("Keep") } },
         )
+    }
+}
+
+/** Each side stretch so far, e.g. "Right  1:15 – 1:31  16m". */
+@Composable
+private fun SessionTimeline(timer: FeedingTimer, now: Long) {
+    val segments = timer.segmentsAt(now)
+    if (segments.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        segments.forEachIndexed { i, seg ->
+            val running = i == segments.lastIndex && timer.isRunning
+            Row(Modifier.fillMaxWidth()) {
+                Text(
+                    seg.side.label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = sideColor(seg.side),
+                    modifier = Modifier.width(56.dp),
+                )
+                Text(
+                    "${formatTime(seg.start)} – ${if (running) "now" else formatTime(seg.end)}",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(formatDuration(seg.durationMs / 1000), style = MaterialTheme.typography.bodyLarge)
+            }
+        }
     }
 }
 

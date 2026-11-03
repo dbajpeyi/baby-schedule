@@ -38,12 +38,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.babyschedule.data.Diaper
+import com.babyschedule.data.DiaperOptions
 import com.babyschedule.data.DiaperType
 import com.babyschedule.data.Feeding
 import com.babyschedule.data.FeedingType
 import com.babyschedule.data.Growth
 import com.babyschedule.data.MilkType
 import com.babyschedule.data.Profile
+import com.babyschedule.data.Segments
+import com.babyschedule.data.segmentList
 import com.babyschedule.data.Side
 import com.babyschedule.data.Sleep
 import com.babyschedule.data.SleepAlert
@@ -53,6 +56,7 @@ import com.babyschedule.util.formatDateShort
 import com.babyschedule.util.formatDuration
 import com.babyschedule.util.formatNumber
 import com.babyschedule.util.formatTime
+import com.babyschedule.util.formatWeightChange
 import com.babyschedule.util.toZoned
 import com.babyschedule.util.zone
 import java.time.Instant
@@ -249,7 +253,7 @@ fun DateTimeField(label: String, millis: Long, onChange: (Long) -> Unit) {
 }
 
 @Composable
-private fun NumberField(
+fun NumberField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
@@ -296,6 +300,16 @@ private fun breastEndTime(initial: Feeding, start: Long, totalSeconds: Int): Lon
     }
 }
 
+/**
+ * Keeps the recorded side switches when only the start time moved (shifting them),
+ * and drops them if the minutes were edited by hand.
+ */
+private fun adjustedSegments(initial: Feeding, start: Long, leftS: Int, rightS: Int): String {
+    if (initial.type != FeedingType.BREAST || leftS != initial.leftSeconds || rightS != initial.rightSeconds) return ""
+    val delta = start - initial.startTime
+    return Segments.encode(initial.segmentList.map { it.copy(start = it.start + delta, end = it.end + delta) })
+}
+
 private fun minutesText(seconds: Int): String =
     if (seconds <= 0) "" else formatNumber(seconds / 60f)
 
@@ -317,6 +331,8 @@ fun FeedingDialog(
     var amount by remember { mutableStateOf(initial.amountMl?.toString() ?: "") }
     var milk by remember { mutableStateOf(initial.milkType ?: MilkType.FORMULA) }
     var notes by remember { mutableStateOf(initial.notes) }
+    var weightBefore by remember { mutableStateOf(gramsText(initial.weightBeforeGrams)) }
+    var weightAfter by remember { mutableStateOf(gramsText(initial.weightAfterGrams)) }
 
     val leftS = parseMinutesToSeconds(left)
     val rightS = parseMinutesToSeconds(right)
@@ -352,6 +368,9 @@ fun FeedingDialog(
                     amountMl = null,
                     milkType = null,
                     notes = notes.trim(),
+                    weightBeforeGrams = parseGrams(weightBefore),
+                    weightAfterGrams = parseGrams(weightAfter),
+                    segments = adjustedSegments(initial, start, leftS, rightS),
                 )
             } else {
                 initial.copy(
@@ -365,6 +384,9 @@ fun FeedingDialog(
                     amountMl = amountMl,
                     milkType = milk,
                     notes = notes.trim(),
+                    weightBeforeGrams = null,
+                    weightAfterGrams = null,
+                    segments = "",
                 )
             }
             onSave(result)
@@ -393,6 +415,19 @@ fun FeedingDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                NumberField(weightBefore, { weightBefore = it }, "Weight before", "g", decimal = false, modifier = Modifier.weight(1f))
+                NumberField(weightAfter, { weightAfter = it }, "Weight after", "g", decimal = false, modifier = Modifier.weight(1f))
+            }
+            val before = parseGrams(weightBefore)
+            val after = parseGrams(weightAfter)
+            if (before != null && after != null) {
+                Text(
+                    "Drank ≈ ${formatWeightChange(after - before)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         } else {
             NumberField(amount, { amount = it }, "Amount", "ml", decimal = false)
             ChoiceChips(MilkType.entries, milk, { it.label }, { milk = it })
@@ -410,16 +445,21 @@ fun DiaperDialog(
 ) {
     var time by remember { mutableLongStateOf(initial.time) }
     var type by remember { mutableStateOf(initial.type) }
+    var color by remember { mutableStateOf(initial.color) }
+    var amount by remember { mutableStateOf(initial.amount) }
     var notes by remember { mutableStateOf(initial.notes) }
     EntryDialog(
         title = if (initial.id == 0L) "Add diaper" else "Edit diaper",
         onDismiss = onDismiss,
         saveEnabled = true,
         onDelete = onDelete,
-        onSave = { onSave(initial.copy(time = time, type = type, notes = notes.trim())) },
+        onSave = {
+            val hasPoop = type != DiaperType.WET
+            onSave(initial.copy(time = time, type = type, color = if (hasPoop) color else "", amount = amount, notes = notes.trim()))
+        },
     ) {
         DateTimeField("Time", time) { time = it }
-        ChoiceChips(DiaperType.entries, type, { it.label }, { type = it })
+        DiaperFields(type, { type = it }, color, { color = it }, amount, { amount = it })
         NotesField(notes) { notes = it }
     }
 }
@@ -453,11 +493,9 @@ fun SleepDialog(
     }
 }
 
-private fun kgText(grams: Int?): String =
-    grams?.let { String.format(Locale.US, "%.3f", it / 1000.0).trimEnd('0').trimEnd('.') } ?: ""
+private fun gramsText(grams: Int?): String = grams?.toString() ?: ""
 
-private fun parseKgToGrams(text: String): Int? =
-    text.toDoubleOrNull()?.let { (it * 1000).roundToInt() }?.takeIf { it > 0 }
+private fun parseGrams(text: String): Int? = text.toIntOrNull()?.takeIf { it > 0 }
 
 @Composable
 fun GrowthDialog(
@@ -467,12 +505,12 @@ fun GrowthDialog(
     onDelete: (() -> Unit)?,
 ) {
     var time by remember { mutableLongStateOf(initial.time) }
-    var weight by remember { mutableStateOf(kgText(initial.weightGrams)) }
+    var weight by remember { mutableStateOf(gramsText(initial.weightGrams)) }
     var length by remember { mutableStateOf(initial.lengthCm?.let { formatNumber(it) } ?: "") }
     var head by remember { mutableStateOf(initial.headCm?.let { formatNumber(it) } ?: "") }
     var notes by remember { mutableStateOf(initial.notes) }
 
-    val grams = parseKgToGrams(weight)
+    val grams = parseGrams(weight)
     val lengthCm = length.toFloatOrNull()?.takeIf { it > 0 }
     val headCm = head.toFloatOrNull()?.takeIf { it > 0 }
     val valid = grams != null || lengthCm != null || headCm != null
@@ -487,10 +525,7 @@ fun GrowthDialog(
         },
     ) {
         DateTimeField("Measured", time) { time = it }
-        NumberField(weight, { weight = it }, "Weight", "kg")
-        if (grams != null) {
-            Text("= $grams g", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        NumberField(weight, { weight = it }, "Weight", "g", decimal = false)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             NumberField(length, { length = it }, "Length", "cm", modifier = Modifier.weight(1f))
             NumberField(head, { head = it }, "Head", "cm", modifier = Modifier.weight(1f))
@@ -503,7 +538,7 @@ fun GrowthDialog(
 fun ProfileDialog(initial: Profile, onDismiss: () -> Unit, onSave: (Profile) -> Unit) {
     var name by remember { mutableStateOf(initial.name) }
     var birth by remember { mutableStateOf(initial.birthDate) }
-    var birthWeight by remember { mutableStateOf(kgText(initial.birthWeightGrams)) }
+    var birthWeight by remember { mutableStateOf(gramsText(initial.birthWeightGrams)) }
     var showDate by remember { mutableStateOf(false) }
 
     AlertDialog(
@@ -524,7 +559,7 @@ fun ProfileDialog(initial: Profile, onDismiss: () -> Unit, onSave: (Profile) -> 
                         Text(birth?.let { formatDateFull(it) } ?: "Choose date")
                     }
                 }
-                NumberField(birthWeight, { birthWeight = it }, "Birth weight", "kg")
+                NumberField(birthWeight, { birthWeight = it }, "Birth weight", "g", decimal = false)
                 Text(
                     "Birth weight is used as the starting point for growth tracking.",
                     style = MaterialTheme.typography.bodySmall,
@@ -534,7 +569,7 @@ fun ProfileDialog(initial: Profile, onDismiss: () -> Unit, onSave: (Profile) -> 
         },
         confirmButton = {
             TextButton(onClick = {
-                onSave(Profile(name.trim(), birth, parseKgToGrams(birthWeight)))
+                onSave(Profile(name.trim(), birth, parseGrams(birthWeight)))
             }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
@@ -643,4 +678,23 @@ fun SettingsDialog(
         confirmButton = { TextButton(onClick = { onSave(SleepAlert(enabled, minutes)) }) { Text("Save") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+/** Pee/poop, poop colour and amount. Colour only shows when there is poop. */
+@Composable
+fun DiaperFields(
+    type: DiaperType,
+    onType: (DiaperType) -> Unit,
+    color: String,
+    onColor: (String) -> Unit,
+    amount: String,
+    onAmount: (String) -> Unit,
+) {
+    ChoiceChips(DiaperType.entries, type, { it.label }, onType)
+    if (type != DiaperType.WET) {
+        Text("Poop colour", style = MaterialTheme.typography.labelMedium)
+        OptionChips(DiaperOptions.colors, color, onColor)
+    }
+    Text("Amount", style = MaterialTheme.typography.labelMedium)
+    OptionChips(DiaperOptions.amounts, amount, onAmount)
 }

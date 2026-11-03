@@ -9,6 +9,7 @@ import com.babyschedule.data.Profile
 import com.babyschedule.data.Side
 import com.babyschedule.data.Sleep
 import com.babyschedule.data.durationMs
+import com.babyschedule.data.intakeGrams
 import com.babyschedule.data.isDirty
 import com.babyschedule.data.isWet
 import com.babyschedule.data.totalSeconds
@@ -29,6 +30,9 @@ data class DayStats(
     val dirty: Int = 0,
     val mixed: Int = 0,
     val sleepMin: Float = 0f,
+    /** Milk drunk according to weighing before/after breastfeeds, in grams. */
+    val breastIntakeG: Int = 0,
+    val weighedFeeds: Int = 0,
 ) {
     val feeds: Int get() = breastFeeds + bottleFeeds
     val diapers: Int get() = wet + dirty + mixed
@@ -65,7 +69,13 @@ data class Stats(
     val sleeps: List<Sleep>,
 )
 
-data class WeightPoint(val time: Long, val grams: Int, val isBirth: Boolean = false)
+data class WeightPoint(
+    val time: Long,
+    val grams: Int,
+    val isBirth: Boolean = false,
+    /** Taken just before a breastfeed rather than logged as a measurement. */
+    val fromFeeding: Boolean = false,
+)
 
 data class GrowthSummary(
     val points: List<WeightPoint>,
@@ -118,6 +128,8 @@ object StatsCalculator {
                 dirty = d.count { it.type == DiaperType.DIRTY },
                 mixed = d.count { it.type == DiaperType.MIXED },
                 sleepMin = sleepMs / 60_000f,
+                breastIntakeG = f.mapNotNull { it.intakeGrams }.sum(),
+                weighedFeeds = f.count { it.intakeGrams != null },
             )
         }
 
@@ -188,8 +200,14 @@ object StatsCalculator {
         }
     }
 
-    fun growth(entries: List<Growth>, profile: Profile, zone: ZoneId = ZoneId.systemDefault()): GrowthSummary {
-        val measured = entries.mapNotNull { g -> g.weightGrams?.let { WeightPoint(g.time, it) } }
+    fun growth(
+        entries: List<Growth>,
+        profile: Profile,
+        weighedFeeds: List<Feeding> = emptyList(),
+        zone: ZoneId = ZoneId.systemDefault(),
+    ): GrowthSummary {
+        val measured = entries.mapNotNull { g -> g.weightGrams?.let { WeightPoint(g.time, it) } } +
+            weighedFeeds.mapNotNull { f -> f.weightBeforeGrams?.let { WeightPoint(f.startTime, it, fromFeeding = true) } }
         val birthPoint = profile.birthWeightGrams?.let { grams ->
             profile.birthDate?.let { WeightPoint(it.atStartOfDay(zone).toInstant().toEpochMilli(), grams, isBirth = true) }
         }

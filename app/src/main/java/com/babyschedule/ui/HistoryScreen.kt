@@ -69,7 +69,7 @@ fun HistoryScreen(vm: BabyViewModel, ui: UiActions, onOpenDetail: (Category) -> 
                     { m -> StatTile("Feeds", s.feeds.toString(), m, sub = "${s.breastFeeds} breast · ${s.bottleFeeds} bottle", accent = SeriesColors.Left, onClick = { onOpenDetail(Category.FEEDS) }) },
                     { m -> StatTile("Breastfeeding", formatMinutes(s.breastMin), m, sub = "L ${formatMinutes(s.leftMin)} · R ${formatMinutes(s.rightMin)}", accent = SeriesColors.Right, onClick = { onOpenDetail(Category.BREAST) }) },
                     { m -> StatTile("Bottle", "${s.bottleMl} ml", m, accent = SeriesColors.Bottle, onClick = { onOpenDetail(Category.BOTTLE) }) },
-                    { m -> StatTile("Diapers", s.diapers.toString(), m, sub = "${s.wetTotal} wet · ${s.dirtyTotal} dirty", accent = SeriesColors.Wet, onClick = { onOpenDetail(Category.DIAPERS) }) },
+                    { m -> StatTile("Diapers", s.diapers.toString(), m, sub = "${s.wetTotal} pee · ${s.dirtyTotal} poop", accent = SeriesColors.Wet, onClick = { onOpenDetail(Category.DIAPERS) }) },
                     { m -> StatTile("Sleep", formatMinutes(s.sleepMin), m, accent = SeriesColors.Sleep, onClick = { onOpenDetail(Category.SLEEP) }) },
                 )
             }

@@ -85,7 +85,7 @@ fun formatAgo(ms: Long, now: Long = System.currentTimeMillis()): String {
     return if (days == 1L) "1 day ago" else "$days days ago"
 }
 
-fun formatWeight(grams: Int): String = String.format(Locale.getDefault(), "%.2f kg", grams / 1000.0)
+fun formatWeight(grams: Int): String = "$grams g"
 
 fun formatWeightChange(grams: Int): String {
     val sign = if (grams >= 0) "+" else "−"

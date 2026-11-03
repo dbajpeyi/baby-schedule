@@ -14,7 +14,34 @@ enum class FeedingType { BREAST, BOTTLE }
 
 enum class MilkType(val label: String) { BREAST_MILK("Breast milk"), FORMULA("Formula") }
 
-enum class DiaperType(val label: String) { WET("Wet"), DIRTY("Dirty"), MIXED("Wet + dirty") }
+enum class DiaperType(val label: String) { WET("Pee"), DIRTY("Poop"), MIXED("Pee + poop") }
+
+/** Simple choices for diaper details; stored as plain text so they stay readable. */
+object DiaperOptions {
+    val colors = listOf("Yellow", "Yellow-green", "Green", "Brown", "Black")
+    val amounts = listOf("Little", "Normal", "Lots")
+}
+
+/** One stretch of feeding on one side. */
+data class Segment(val side: Side, val start: Long, val end: Long) {
+    val durationMs: Long get() = (end - start).coerceAtLeast(0)
+}
+
+/** Encodes segments as "LEFT:start:end;RIGHT:start:end" for storage. */
+object Segments {
+    fun encode(list: List<Segment>): String =
+        list.joinToString(";") { "${it.side.name}:${it.start}:${it.end}" }
+
+    fun decode(text: String): List<Segment> =
+        if (text.isBlank()) emptyList() else text.split(";").mapNotNull { part ->
+            val p = part.split(":")
+            if (p.size != 3) return@mapNotNull null
+            val side = Side.entries.firstOrNull { it.name == p[0] } ?: return@mapNotNull null
+            val start = p[1].toLongOrNull() ?: return@mapNotNull null
+            val end = p[2].toLongOrNull() ?: return@mapNotNull null
+            Segment(side, start, end)
+        }
+}
 
 @Entity(tableName = "feedings")
 data class Feeding(
@@ -29,9 +56,22 @@ data class Feeding(
     val amountMl: Int? = null,
     val milkType: MilkType? = null,
     val notes: String = "",
+    val weightBeforeGrams: Int? = null,
+    val weightAfterGrams: Int? = null,
+    /** Side switches in order, see [Segments]. Empty for manually entered feeds. */
+    val segments: String = "",
 )
 
 val Feeding.totalSeconds: Int get() = leftSeconds + rightSeconds
+val Feeding.segmentList: List<Segment> get() = Segments.decode(segments)
+
+/** Weight gained during the feed (≈ ml of milk drunk), if weighed before and after. */
+val Feeding.intakeGrams: Int?
+    get() {
+        val before = weightBeforeGrams ?: return null
+        val after = weightAfterGrams ?: return null
+        return after - before
+    }
 
 @Entity(tableName = "diapers")
 data class Diaper(
@@ -39,6 +79,12 @@ data class Diaper(
     val time: Long,
     val type: DiaperType,
     val notes: String = "",
+    /** Poop colour, one of [DiaperOptions.colors] or empty. */
+    val color: String = "",
+    /** One of [DiaperOptions.amounts] or empty. */
+    val amount: String = "",
+    /** Set when the change was logged as part of a feeding session. */
+    val feedingId: Long? = null,
 )
 
 val Diaper.isWet: Boolean get() = type == DiaperType.WET || type == DiaperType.MIXED

@@ -7,8 +7,12 @@ import com.babyschedule.data.FeedingTimer
 import com.babyschedule.data.FeedingType
 import com.babyschedule.data.Growth
 import com.babyschedule.data.Profile
+import com.babyschedule.data.Segment
+import com.babyschedule.data.Segments
 import com.babyschedule.data.Side
 import com.babyschedule.data.Sleep
+import com.babyschedule.data.intakeGrams
+import com.babyschedule.data.segmentList
 import com.babyschedule.domain.StatsCalculator
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -42,6 +46,31 @@ class LogicTest {
         assertEquals(Side.LEFT, f.firstSide)
         assertEquals(Side.RIGHT, f.lastSide)
         assertEquals(t0, f.startTime)
+        assertEquals(
+            listOf(Segment(Side.LEFT, t0, t0 + 10 * 60_000), Segment(Side.RIGHT, t0 + 10 * 60_000, t0 + 15 * 60_000)),
+            f.segmentList,
+        )
+    }
+
+    @Test
+    fun sessionLikeTheNotebook() {
+        // Right 1:15, left 1:31, back to right 1:47, end 1:54; weighed 2575 g -> 2620 g.
+        val t = FeedingTimer(weightBeforeGrams = 2575)
+            .tap(Side.RIGHT, at(1, 15))
+            .startSide(Side.LEFT, at(1, 31))
+            .startSide(Side.RIGHT, at(1, 47))
+            .pause(at(1, 54))
+        val f = t.toFeeding(at(2, 30))!!.copy(weightAfterGrams = 2620)
+        assertEquals(3, f.segmentList.size)
+        assertEquals(at(1, 54), f.endTime)
+        assertEquals((16 + 7) * 60, f.rightSeconds)
+        assertEquals(16 * 60, f.leftSeconds)
+        assertEquals(45, f.intakeGrams)
+        assertEquals(f.segmentList, Segments.decode(Segments.encode(f.segmentList)))
+
+        val d = StatsCalculator.compute(day, day, listOf(f), emptyList(), emptyList(), zone).days.single()
+        assertEquals(45, d.breastIntakeG)
+        assertEquals(1, d.weighedFeeds)
     }
 
     @Test
@@ -108,7 +137,7 @@ class LogicTest {
             Growth(time = at(10, date = day.plusDays(3)), weightGrams = 3300),
             Growth(time = at(10, date = day.plusDays(14)), weightGrams = 3700),
         )
-        val g = StatsCalculator.growth(entries, profile, zone)
+        val g = StatsCalculator.growth(entries, profile, zone = zone)
         assertEquals(3, g.points.size)
         assertEquals(200, g.changeSinceBirth)
         assertEquals(3300, g.lowest!!.grams)

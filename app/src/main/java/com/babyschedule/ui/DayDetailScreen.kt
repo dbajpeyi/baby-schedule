@@ -60,7 +60,8 @@ fun DayDetailScreen(vm: BabyViewModel, ui: UiActions, category: Category, onClos
     val isToday = selected == LocalDate.now()
     BackHandler(onBack = onClose)
 
-    val events = day.timeline().filter { e ->
+    // Diapers changed during a feed are shown inside that feed on other pages; list them all here.
+    val events = if (category == Category.DIAPERS) day.diapers.map { TimelineEvent.DiaperEvent(it) } else day.timeline().filter { e ->
         when (category) {
             Category.FEEDS -> e is TimelineEvent.FeedingEvent
             Category.BREAST -> e is TimelineEvent.FeedingEvent && e.feeding.type == FeedingType.BREAST
@@ -190,6 +191,8 @@ private fun breakdown(category: Category, day: DayData): List<Pair<String, Strin
                 "Sessions" to "${sessions.size}",
                 "Average session" to (if (sessions.isEmpty()) "—" else formatDuration((left + right).toLong() / sessions.size)),
                 "Longest session" to (sessions.maxOfOrNull { it.totalSeconds }?.let { formatDuration(it.toLong()) } ?: "—"),
+                "Drank (weighed feeds)" to (if (s.weighedFeeds == 0) "—" else "≈ ${s.breastIntakeG} g in ${s.weighedFeeds} feed(s)"),
+                "Average per weighed feed" to (if (s.weighedFeeds == 0) "—" else "≈ ${s.breastIntakeG / s.weighedFeeds} g"),
             )
         }
         Category.BOTTLE -> {
@@ -206,13 +209,13 @@ private fun breakdown(category: Category, day: DayData): List<Pair<String, Strin
         }
         Category.DIAPERS -> listOf(
             "Total changes" to "${s.diapers}",
-            "Wet only" to "${s.wet}",
-            "Dirty only" to "${s.dirty}",
-            "Wet + dirty" to "${s.mixed}",
-            "All wet" to "${s.wetTotal}",
-            "All dirty" to "${s.dirtyTotal}",
+            "Pee only" to "${s.wet}",
+            "Poop only" to "${s.dirty}",
+            "Pee + poop" to "${s.mixed}",
+            "All with pee" to "${s.wetTotal}",
+            "All with poop" to "${s.dirtyTotal}",
             "Last change" to (day.diapers.maxOfOrNull { it.time }?.let { formatTime(it) } ?: "—"),
-        ).let { rows -> if (day.diapers.any { it.type == DiaperType.MIXED }) rows else rows.filterNot { it.first.startsWith("All ") } }
+        ).let { rows -> if (day.diapers.any { it.type == DiaperType.MIXED }) rows else rows.filterNot { it.first.startsWith("All with") } }
         Category.SLEEP -> {
             val durations = day.sleeps.map { it.durationMs }
             listOf(
