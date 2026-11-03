@@ -152,7 +152,7 @@ fun TodayScreen(
             ) {
                 Icon(Icons.Filled.Add, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text("Add a single entry (bottle, diaper, weight…)")
+                Text("Add a single entry (e.g. bottle)", maxLines = 1)
             }
         }
 

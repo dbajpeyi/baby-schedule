@@ -99,14 +99,14 @@ shot 06-session-from-timer
 tap "Save session"
 
 # Bottle, diaper and weight via "Add entry"
-tap "Add a single entry (bottle, diaper, weight…)"
+tap "Add a single entry (e.g. bottle)"
 shot 08-add-menu
 tap "Bottle feed only" && tap "Amount" && type_text "90"
 tap "Save"
-tap "Add a single entry (bottle, diaper, weight…)"
+tap "Add a single entry (e.g. bottle)"
 tap "Diaper only" && tap "Poop"
 tap "Save"
-tap "Add a single entry (bottle, diaper, weight…)"
+tap "Add a single entry (e.g. bottle)"
 tap "Weight / growth" && tap "Weight" && type_text "2650"
 tap "Save"
 
