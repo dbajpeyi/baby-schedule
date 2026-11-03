@@ -39,7 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.babyschedule.data.Diaper
+import com.babyschedule.domain.SessionDraft
 import com.babyschedule.data.DiaperType
 import com.babyschedule.data.FeedingTimer
 import com.babyschedule.data.Side
@@ -54,25 +54,24 @@ import com.babyschedule.util.formatWeightChange
 private fun sideColor(side: Side) = if (side == Side.LEFT) SeriesColors.Left else SeriesColors.Right
 
 /**
- * A full-screen breastfeeding session: choose the starting side, time it
- * (switching sides as needed), then review and save it as one feed.
+ * Live breastfeeding timer (secondary to logging sessions afterwards): choose the
+ * starting side, time it with side switches, then "End feeding" opens the session
+ * form pre-filled so the diaper, weights and sleep can be added.
  */
 @Composable
-fun FeedingSessionScreen(vm: BabyViewModel, ui: UiActions, onClose: () -> Unit) {
+fun FeedingSessionScreen(vm: BabyViewModel, ui: UiActions, onClose: () -> Unit, onFinish: (SessionDraft) -> Unit) {
     val timer by vm.timer.collectAsStateWithLifecycle()
     val lastBreast by vm.lastBreastFeeding.collectAsStateWithLifecycle()
-    var reviewing by rememberSaveable { mutableStateOf(false) }
+    var confirmDiscard by rememberSaveable { mutableStateOf(false) }
 
-    BackHandler {
-        if (reviewing) reviewing = false else onClose()
-    }
+    BackHandler(onBack = onClose)
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (reviewing) "Review feeding" else "Breastfeeding") },
+                title = { Text("Feeding timer") },
                 navigationIcon = {
-                    IconButton(onClick = { if (reviewing) reviewing = false else onClose() }) {
+                    IconButton(onClick = onClose) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -87,44 +86,44 @@ fun FeedingSessionScreen(vm: BabyViewModel, ui: UiActions, onClose: () -> Unit) 
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            when {
-                !timer.isActive -> ChooseSide(
+            if (!timer.isActive) {
+                ChooseSide(
                     suggested = StatsCalculator.suggestedSide(lastBreast),
                     onChoose = { side, weight -> vm.startFeeding(side, weight) },
                 )
-                !reviewing -> RunningSession(
+            } else {
+                RunningSession(
                     timer = timer,
                     onSwitch = vm::switchSide,
                     onPause = vm::pauseTimer,
                     onResume = vm::resumeTimer,
                     onEnd = {
                         vm.pauseTimer()
-                        reviewing = true
+                        onFinish(SessionDraft.fromTimer(vm.timer.value, System.currentTimeMillis()))
                     },
                 )
-                else -> ReviewSession(
-                    timer = timer,
-                    onSave = { weightAfter, diaper, notes ->
-                        ui.launch {
-                            val saved = vm.saveSession(weightAfter, diaper, notes)
-                            reviewing = false
-                            onClose()
-                            if (saved != null) ui.undoable("Feeding saved") { vm.undoSession(saved) }
-                        }
-                    },
-                    onContinue = {
-                        vm.resumeTimer()
-                        reviewing = false
-                    },
-                    onDiscard = {
-                        vm.discardTimer()
-                        reviewing = false
-                        onClose()
-                        ui.message("Feeding discarded")
-                    },
-                )
+                TextButton(onClick = { confirmDiscard = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Discard this feeding", color = MaterialTheme.colorScheme.error)
+                }
             }
         }
+    }
+
+    if (confirmDiscard) {
+        AlertDialog(
+            onDismissRequest = { confirmDiscard = false },
+            title = { Text("Discard this feeding?") },
+            text = { Text("The timer is reset and nothing is saved.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDiscard = false
+                    vm.discardTimer()
+                    onClose()
+                    ui.message("Feeding discarded")
+                }) { Text("Discard") }
+            },
+            dismissButton = { TextButton(onClick = { confirmDiscard = false }) { Text("Keep") } },
+        )
     }
 }
 
@@ -228,104 +227,13 @@ private fun RunningSession(
     }
     Spacer(Modifier.height(8.dp))
     OutlinedButton(onClick = onEnd, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-        Text("End feeding", style = MaterialTheme.typography.titleMedium)
+        Text("End feeding and log session", style = MaterialTheme.typography.titleMedium)
     }
     Text(
         "You can leave this screen; the timer keeps running.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-}
-
-@Composable
-private fun ReviewSession(
-    timer: FeedingTimer,
-    onSave: (Int?, Diaper?, String) -> Unit,
-    onContinue: () -> Unit,
-    onDiscard: () -> Unit,
-) {
-    val now by rememberNow()
-    var weightAfter by rememberSaveable { mutableStateOf("") }
-    var diaperChanged by rememberSaveable { mutableStateOf(false) }
-    var diaperType by rememberSaveable { mutableStateOf(DiaperType.MIXED) }
-    var amount by rememberSaveable { mutableStateOf("") }
-    var diaperNotes by rememberSaveable { mutableStateOf("") }
-    var notes by rememberSaveable { mutableStateOf("") }
-    var confirmDiscard by rememberSaveable { mutableStateOf(false) }
-    val start = timer.sessionStart ?: now
-    val end = timer.endTime(now)
-    val before = timer.weightBeforeGrams
-    val after = weightAfter.toIntOrNull()?.takeIf { it > 0 }
-
-    SectionCard(title = "${formatTime(start)} – ${formatTime(end)} · ${formatDuration(timer.totalAt(now) / 1000)}") {
-        SessionTimeline(timer, now)
-        HorizontalDivider()
-        ReviewRow("Left total", formatDuration(timer.leftAt(now) / 1000))
-        ReviewRow("Right total", formatDuration(timer.rightAt(now) / 1000))
-        if (before != null) ReviewRow("Weight before", formatWeight(before))
-    }
-
-    Text("Weight after feeding (optional)", style = MaterialTheme.typography.titleMedium)
-    NumberField(weightAfter, { weightAfter = it }, "Weight after", "g", decimal = false)
-    if (before != null && after != null) {
-        Text(
-            "Drank ≈ ${formatWeightChange(after - before)}",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary,
-        )
-    }
-
-    Text("Diaper changed?", style = MaterialTheme.typography.titleMedium)
-    ChoiceChips(listOf(false, true), diaperChanged, { if (it) "Yes" else "No" }, { diaperChanged = it })
-    if (diaperChanged) {
-        DiaperFields(diaperType, { diaperType = it }, amount, { amount = it })
-        OutlinedTextField(
-            value = diaperNotes,
-            onValueChange = { diaperNotes = it },
-            label = { Text("Diaper notes (e.g. colour)") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
-
-    OutlinedTextField(
-        value = notes,
-        onValueChange = { notes = it },
-        label = { Text("Notes (optional)") },
-        modifier = Modifier.fillMaxWidth(),
-    )
-
-    Button(
-        onClick = {
-            val diaper = if (diaperChanged) {
-                Diaper(
-                    time = start,
-                    type = diaperType,
-                    amount = amount,
-                    notes = diaperNotes.trim(),
-                )
-            } else null
-            onSave(after, diaper, notes)
-        },
-        modifier = Modifier.fillMaxWidth().height(64.dp),
-    ) {
-        Text("Save feeding", style = MaterialTheme.typography.titleMedium)
-    }
-    OutlinedButton(onClick = onContinue, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-        Text("Continue feeding", style = MaterialTheme.typography.titleMedium)
-    }
-    TextButton(onClick = { confirmDiscard = true }, modifier = Modifier.fillMaxWidth()) {
-        Text("Discard this feeding", color = MaterialTheme.colorScheme.error)
-    }
-
-    if (confirmDiscard) {
-        AlertDialog(
-            onDismissRequest = { confirmDiscard = false },
-            title = { Text("Discard this feeding?") },
-            text = { Text("Nothing will be saved.") },
-            confirmButton = { TextButton(onClick = { confirmDiscard = false; onDiscard() }) { Text("Discard") } },
-            dismissButton = { TextButton(onClick = { confirmDiscard = false }) { Text("Keep") } },
-        )
-    }
 }
 
 /** Each side stretch so far, e.g. "Right  1:15 – 1:31  16m". */
@@ -352,17 +260,5 @@ private fun SessionTimeline(timer: FeedingTimer, now: Long) {
                 Text(formatDuration(seg.durationMs / 1000), style = MaterialTheme.typography.bodyLarge)
             }
         }
-    }
-}
-
-@Composable
-private fun ReviewRow(label: String, value: String, bold: Boolean = false) {
-    Row(Modifier.fillMaxWidth()) {
-        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        Text(
-            value,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
-        )
     }
 }

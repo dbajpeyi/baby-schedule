@@ -13,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.HorizontalDivider
@@ -50,6 +51,7 @@ import com.babyschedule.data.segmentList
 import com.babyschedule.data.Side
 import com.babyschedule.data.Sleep
 import com.babyschedule.data.SleepAlert
+import com.babyschedule.domain.SessionDraft
 import com.babyschedule.notify.SleepAlertScheduler
 import com.babyschedule.util.formatDateFull
 import com.babyschedule.util.formatDateShort
@@ -76,10 +78,6 @@ sealed interface DialogRequest {
     data class AddMenu(val time: Long) : DialogRequest
 
     companion object {
-        fun newBreastFeeding(time: Long) = EditFeeding(
-            Feeding(type = FeedingType.BREAST, startTime = time, endTime = time)
-        )
-
         fun newBottle(time: Long) = EditFeeding(
             Feeding(type = FeedingType.BOTTLE, startTime = time, endTime = time, milkType = MilkType.FORMULA)
         )
@@ -148,6 +146,10 @@ fun DialogHost(request: DialogRequest?, vm: BabyViewModel, ui: UiActions, onDism
                 time = request.time,
                 onDismiss = onDismiss,
                 onPick = { ui.openDialog(it) },
+                onSession = {
+                    onDismiss()
+                    ui.editDraft(SessionDraft.new(request.time))
+                },
             )
         }
     }
@@ -229,27 +231,31 @@ fun DateTimeField(label: String, millis: Long, onChange: (Long) -> Unit) {
         }
     }
     if (showTime) {
-        val context = LocalContext.current
-        val state = rememberTimePickerState(
-            initialHour = zdt.hour,
-            initialMinute = zdt.minute,
-            is24Hour = DateFormat.is24HourFormat(context),
-        )
-        AlertDialog(
-            onDismissRequest = { showTime = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    onChange(
-                        zdt.withHour(state.hour).withMinute(state.minute).withSecond(0).withNano(0)
-                            .toInstant().toEpochMilli()
-                    )
-                    showTime = false
-                }) { Text("OK") }
-            },
-            dismissButton = { TextButton(onClick = { showTime = false }) { Text("Cancel") } },
-            text = { TimePicker(state = state) },
-        )
+        TimePickerPopup(zdt.hour, zdt.minute, onDismiss = { showTime = false }) { h, m ->
+            onChange(zdt.withHour(h).withMinute(m).withSecond(0).withNano(0).toInstant().toEpochMilli())
+        }
     }
+}
+
+@Composable
+fun TimePickerPopup(hour: Int, minute: Int, onDismiss: () -> Unit, onPick: (Int, Int) -> Unit) {
+    val context = LocalContext.current
+    val state = rememberTimePickerState(
+        initialHour = hour,
+        initialMinute = minute,
+        is24Hour = DateFormat.is24HourFormat(context),
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = {
+                onPick(state.hour, state.minute)
+                onDismiss()
+            }) { Text("OK") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        text = { TimePicker(state = state) },
+    )
 }
 
 @Composable
@@ -287,35 +293,7 @@ private fun NotesField(value: String, onValueChange: (String) -> Unit) {
     )
 }
 
-/**
- * Keeps any pause time from the original session (end shifts with the start),
- * but never ends before start + timed duration.
- */
-private fun breastEndTime(initial: Feeding, start: Long, totalSeconds: Int): Long {
-    val minimum = start + totalSeconds * 1000L
-    return if (initial.id != 0L && initial.type == FeedingType.BREAST) {
-        maxOf(minimum, initial.endTime + (start - initial.startTime))
-    } else {
-        minimum
-    }
-}
-
-/**
- * Keeps the recorded side switches when only the start time moved (shifting them),
- * and drops them if the minutes were edited by hand.
- */
-private fun adjustedSegments(initial: Feeding, start: Long, leftS: Int, rightS: Int): String {
-    if (initial.type != FeedingType.BREAST || leftS != initial.leftSeconds || rightS != initial.rightSeconds) return ""
-    val delta = start - initial.startTime
-    return Segments.encode(initial.segmentList.map { it.copy(start = it.start + delta, end = it.end + delta) })
-}
-
-private fun minutesText(seconds: Int): String =
-    if (seconds <= 0) "" else formatNumber(seconds / 60f)
-
-private fun parseMinutesToSeconds(text: String): Int =
-    ((text.toFloatOrNull() ?: 0f) * 60).roundToInt().coerceAtLeast(0)
-
+/** Bottle feeds logged on their own (breastfeeds are logged as sessions). */
 @Composable
 fun FeedingDialog(
     initial: Feeding,
@@ -323,115 +301,33 @@ fun FeedingDialog(
     onSave: (Feeding) -> Unit,
     onDelete: (() -> Unit)?,
 ) {
-    var type by remember { mutableStateOf(initial.type) }
     var start by remember { mutableLongStateOf(initial.startTime) }
-    var left by remember { mutableStateOf(minutesText(initial.leftSeconds)) }
-    var right by remember { mutableStateOf(minutesText(initial.rightSeconds)) }
-    var firstSide by remember { mutableStateOf(initial.firstSide ?: Side.LEFT) }
     var amount by remember { mutableStateOf(initial.amountMl?.toString() ?: "") }
     var milk by remember { mutableStateOf(initial.milkType ?: MilkType.FORMULA) }
     var notes by remember { mutableStateOf(initial.notes) }
-    var weightBefore by remember { mutableStateOf(gramsText(initial.weightBeforeGrams)) }
-    var weightAfter by remember { mutableStateOf(gramsText(initial.weightAfterGrams)) }
-
-    val leftS = parseMinutesToSeconds(left)
-    val rightS = parseMinutesToSeconds(right)
     val amountMl = amount.toIntOrNull() ?: 0
-    val valid = if (type == FeedingType.BREAST) leftS + rightS > 0 else amountMl > 0
 
     EntryDialog(
-        title = if (initial.id == 0L) "Add feeding" else "Edit feeding",
+        title = if (initial.id == 0L) "Add bottle feed" else "Edit bottle feed",
         onDismiss = onDismiss,
-        saveEnabled = valid,
+        saveEnabled = amountMl > 0,
         onDelete = onDelete,
         onSave = {
-            val result = if (type == FeedingType.BREAST) {
-                val first = when {
-                    leftS == 0 -> Side.RIGHT
-                    rightS == 0 -> Side.LEFT
-                    else -> firstSide
-                }
-                val last = when {
-                    leftS == 0 -> Side.RIGHT
-                    rightS == 0 -> Side.LEFT
-                    initial.lastSide != null && initial.leftSeconds > 0 && initial.rightSeconds > 0 -> initial.lastSide
-                    else -> first.other()
-                }
-                initial.copy(
-                    type = FeedingType.BREAST,
-                    startTime = start,
-                    endTime = breastEndTime(initial, start, leftS + rightS),
-                    leftSeconds = leftS,
-                    rightSeconds = rightS,
-                    firstSide = first,
-                    lastSide = last,
-                    amountMl = null,
-                    milkType = null,
-                    notes = notes.trim(),
-                    weightBeforeGrams = parseGrams(weightBefore),
-                    weightAfterGrams = parseGrams(weightAfter),
-                    segments = adjustedSegments(initial, start, leftS, rightS),
-                )
-            } else {
+            onSave(
                 initial.copy(
                     type = FeedingType.BOTTLE,
                     startTime = start,
                     endTime = start,
-                    leftSeconds = 0,
-                    rightSeconds = 0,
-                    firstSide = null,
-                    lastSide = null,
                     amountMl = amountMl,
                     milkType = milk,
                     notes = notes.trim(),
-                    weightBeforeGrams = null,
-                    weightAfterGrams = null,
-                    segments = "",
                 )
-            }
-            onSave(result)
+            )
         },
     ) {
-        ChoiceChips(
-            options = FeedingType.entries,
-            selected = type,
-            label = { if (it == FeedingType.BREAST) "Breast" else "Bottle" },
-            onSelect = { type = it },
-        )
-        DateTimeField("Started", start) { start = it }
-        if (type == FeedingType.BREAST) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                NumberField(left, { left = it }, "Left", "min", modifier = Modifier.weight(1f))
-                NumberField(right, { right = it }, "Right", "min", modifier = Modifier.weight(1f))
-            }
-            if (leftS > 0 && rightS > 0) {
-                Text("Started on", style = MaterialTheme.typography.labelMedium)
-                ChoiceChips(Side.entries, firstSide, { it.label }, { firstSide = it })
-            }
-            if (leftS + rightS > 0) {
-                Text(
-                    "Total ${formatDuration((leftS + rightS).toLong())}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                NumberField(weightBefore, { weightBefore = it }, "Weight before", "g", decimal = false, modifier = Modifier.weight(1f))
-                NumberField(weightAfter, { weightAfter = it }, "Weight after", "g", decimal = false, modifier = Modifier.weight(1f))
-            }
-            val before = parseGrams(weightBefore)
-            val after = parseGrams(weightAfter)
-            if (before != null && after != null) {
-                Text(
-                    "Drank ≈ ${formatWeightChange(after - before)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        } else {
-            NumberField(amount, { amount = it }, "Amount", "ml", decimal = false)
-            ChoiceChips(MilkType.entries, milk, { it.label }, { milk = it })
-        }
+        DateTimeField("Time", start) { start = it }
+        NumberField(amount, { amount = it }, "Amount", "ml", decimal = false)
+        ChoiceChips(MilkType.entries, milk, { it.label }, { milk = it })
         NotesField(notes) { notes = it }
     }
 }
@@ -581,12 +477,11 @@ fun ProfileDialog(initial: Profile, onDismiss: () -> Unit, onSave: (Profile) -> 
 }
 
 @Composable
-fun AddEntryDialog(time: Long, onDismiss: () -> Unit, onPick: (DialogRequest) -> Unit) {
+fun AddEntryDialog(time: Long, onDismiss: () -> Unit, onPick: (DialogRequest) -> Unit, onSession: () -> Unit) {
     val options = listOf(
-        "Bottle feed" to DialogRequest.newBottle(time),
-        "Diaper" to DialogRequest.newDiaper(time),
-        "Past breastfeed" to DialogRequest.newBreastFeeding(time),
-        "Past sleep" to DialogRequest.newSleep(time),
+        "Bottle feed only" to DialogRequest.newBottle(time),
+        "Diaper only" to DialogRequest.newDiaper(time),
+        "Sleep only" to DialogRequest.newSleep(time),
         "Weight / growth" to DialogRequest.newGrowth(time),
     )
     AlertDialog(
@@ -594,6 +489,9 @@ fun AddEntryDialog(time: Long, onDismiss: () -> Unit, onPick: (DialogRequest) ->
         title = { Text("Add entry") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onSession, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                    Text("Session (diaper, feed, sleep)", style = MaterialTheme.typography.titleSmall)
+                }
                 options.forEach { (label, request) ->
                     OutlinedButton(
                         onClick = { onPick(request) },

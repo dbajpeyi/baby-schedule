@@ -41,7 +41,9 @@ fun HistoryScreen(vm: BabyViewModel, ui: UiActions, onOpenDetail: (Category) -> 
     val selected by vm.selectedDay.collectAsStateWithLifecycle()
     val data by vm.historyData.collectAsStateWithLifecycle()
     var pickDate by remember { mutableStateOf(false) }
-    val events = data.timeline()
+    val sleepStart by vm.sleepStart.collectAsStateWithLifecycle()
+    val sleepSessionId by vm.sleepSessionId.collectAsStateWithLifecycle()
+    val events = data.timeline(sleepSessionId, sleepStart)
     val s = data.summary
     val isToday = selected == LocalDate.now()
 
@@ -103,7 +105,7 @@ fun HistoryScreen(vm: BabyViewModel, ui: UiActions, onOpenDetail: (Category) -> 
                 )
             }
             items(events, key = { it.key }) { event ->
-                TimelineRow(event) { ui.openDialog(event.editRequest()) }
+                TimelineRow(event) { ui.open(event) }
             }
         }
         item { Spacer(Modifier.height(24.dp)) }

@@ -57,7 +57,10 @@ import com.babyschedule.data.Feeding
 import com.babyschedule.data.FeedingType
 import com.babyschedule.data.Growth
 import com.babyschedule.data.MilkType
+import com.babyschedule.data.Session
 import com.babyschedule.data.Sleep
+import com.babyschedule.data.intakeGrams
+import com.babyschedule.domain.SessionDraft
 import com.babyschedule.data.durationMs
 import com.babyschedule.data.segmentList
 import com.babyschedule.data.totalSeconds
@@ -78,7 +81,36 @@ class UiActions(
     /** Asks for notification permission (Android 13+) if not yet granted. */
     val requestNotifications: () -> Unit,
     val openDialog: (DialogRequest) -> Unit,
+    /** Opens the session form for an existing session. */
+    val openSession: (Long) -> Unit,
+    /** Opens the session form with a draft (new session, or one built from a live timer). */
+    val editDraft: (SessionDraft) -> Unit,
 ) {
+    /** Opens the right editor for a log entry: its session if it has one, otherwise its own form. */
+    fun open(event: TimelineEvent) {
+        when (event) {
+            is TimelineEvent.SessionEvent -> openSession(event.session.id)
+            is TimelineEvent.FeedingEvent -> {
+                val f = event.feeding
+                val sid = f.sessionId
+                when {
+                    sid != null -> openSession(sid)
+                    f.type == FeedingType.BREAST -> editDraft(SessionDraft.from(null, f, null, null))
+                    else -> openDialog(DialogRequest.EditFeeding(f))
+                }
+            }
+            is TimelineEvent.DiaperEvent -> {
+                val sid = event.diaper.sessionId
+                if (sid != null) openSession(sid) else openDialog(DialogRequest.EditDiaper(event.diaper))
+            }
+            is TimelineEvent.SleepEvent -> {
+                val sid = event.sleep.sessionId
+                if (sid != null) openSession(sid) else openDialog(DialogRequest.EditSleep(event.sleep))
+            }
+            is TimelineEvent.GrowthEvent -> openDialog(DialogRequest.EditGrowth(event.growth))
+        }
+    }
+
     fun launch(block: suspend () -> Unit) {
         scope.launch { block() }
     }
@@ -258,8 +290,21 @@ sealed interface TimelineEvent {
     val key: String
     val item: Any
 
-    /** A feed; [diaper] is a change logged as part of the same session. */
-    data class FeedingEvent(val feeding: Feeding, val diaper: Diaper? = null) : TimelineEvent {
+    /** A whole session: diaper, feed, weights and sleep logged together. */
+    data class SessionEvent(
+        val session: Session,
+        val feeding: Feeding?,
+        val diapers: List<Diaper>,
+        val sleep: Sleep?,
+        /** Set when the baby is asleep right now as part of this session. */
+        val sleepingSince: Long? = null,
+    ) : TimelineEvent {
+        override val time get() = session.startTime
+        override val key get() = "x${session.id}"
+        override val item: Any get() = session
+    }
+
+    data class FeedingEvent(val feeding: Feeding) : TimelineEvent {
         override val time get() = feeding.startTime
         override val key get() = "f${feeding.id}"
         override val item: Any get() = feeding
@@ -284,23 +329,27 @@ sealed interface TimelineEvent {
     }
 }
 
-fun DayData.timeline(): List<TimelineEvent> = buildList {
-    val feedingIds = feedings.map { it.id }.toSet()
-    val sessionDiapers = diapers.filter { it.feedingId != null && it.feedingId in feedingIds }
-        .associateBy { it.feedingId }
-    feedings.forEach { add(TimelineEvent.FeedingEvent(it, sessionDiapers[it.id])) }
-    diapers.filter { it.feedingId == null || it.feedingId !in feedingIds }
-        .forEach { add(TimelineEvent.DiaperEvent(it)) }
-    sleeps.forEach { add(TimelineEvent.SleepEvent(it)) }
+/**
+ * The day's log: sessions as single entries, plus anything logged on its own.
+ * Pass the live sleep so a session can show "sleeping now".
+ */
+fun DayData.timeline(liveSleepSessionId: Long? = null, liveSleepStart: Long? = null): List<TimelineEvent> = buildList {
+    sessions.forEach { s ->
+        add(
+            TimelineEvent.SessionEvent(
+                session = s,
+                feeding = sessionFeedings.firstOrNull { it.sessionId == s.id },
+                diapers = sessionDiapers.filter { it.sessionId == s.id },
+                sleep = sessionSleeps.firstOrNull { it.sessionId == s.id },
+                sleepingSince = if (liveSleepSessionId == s.id) liveSleepStart else null,
+            )
+        )
+    }
+    feedings.filter { it.sessionId == null }.forEach { add(TimelineEvent.FeedingEvent(it)) }
+    diapers.filter { it.sessionId == null }.forEach { add(TimelineEvent.DiaperEvent(it)) }
+    sleeps.filter { it.sessionId == null }.forEach { add(TimelineEvent.SleepEvent(it)) }
     growth.forEach { add(TimelineEvent.GrowthEvent(it)) }
 }.sortedByDescending { it.time }
-
-fun TimelineEvent.editRequest(): DialogRequest = when (this) {
-    is TimelineEvent.FeedingEvent -> DialogRequest.EditFeeding(feeding)
-    is TimelineEvent.DiaperEvent -> DialogRequest.EditDiaper(diaper)
-    is TimelineEvent.SleepEvent -> DialogRequest.EditSleep(sleep)
-    is TimelineEvent.GrowthEvent -> DialogRequest.EditGrowth(growth)
-}
 
 private data class EventLook(
     val icon: ImageVector,
@@ -324,29 +373,66 @@ private fun weightLine(f: Feeding): String? {
     }
 }
 
+private fun sideLines(f: Feeding): List<String> {
+    val segments = f.segmentList
+    return if (segments.isNotEmpty()) {
+        segments.map { "${it.side.label} ${formatTime(it.start)} – ${formatTime(it.end)} (${formatDuration(it.durationMs / 1000)})" }
+    } else {
+        listOf(
+            buildList {
+                if (f.leftSeconds > 0) add("Left ${formatDuration(f.leftSeconds.toLong())}")
+                if (f.rightSeconds > 0) add("Right ${formatDuration(f.rightSeconds.toLong())}")
+            }.joinToString(" · ")
+        )
+    }
+}
+
+private fun diaperLine(d: Diaper): String =
+    "Diaper: ${diaperSummary(d)}" + if (d.notes.isNotBlank()) " · ${d.notes}" else ""
+
+private fun sessionLook(e: TimelineEvent.SessionEvent): EventLook {
+    val f = e.feeding
+    val lines = buildList {
+        e.diapers.forEach { add(diaperLine(it)) }
+        if (f != null && f.type == FeedingType.BREAST) {
+            f.weightBeforeGrams?.let { add("Weight before ${formatWeight(it)}") }
+            addAll(sideLines(f))
+            f.weightAfterGrams?.let { after ->
+                add("Weight after ${formatWeight(after)}" + (f.intakeGrams?.let { " (drank ${formatWeightChange(it)})" } ?: ""))
+            }
+        } else if (f != null) {
+            add("Bottle ${f.amountMl ?: 0} ml · ${(f.milkType ?: MilkType.FORMULA).label}")
+        }
+        e.sleep?.let { add("Sleep ${formatTime(it.startTime)} – ${formatTime(it.endTime)} (${formatDuration(it.durationMs / 1000)})") }
+        e.sleepingSince?.let { add("Sleeping since ${formatTime(it)}") }
+        e.session.notes.takeIf { it.isNotBlank() }?.let { add(it) }
+    }
+    val title = when {
+        f != null && f.type == FeedingType.BREAST -> "Breastfeeding · ${formatDuration(f.totalSeconds.toLong())}"
+        f != null -> "Bottle · ${f.amountMl ?: 0} ml"
+        e.sleep != null || e.sleepingSince != null -> "Sleep"
+        e.diapers.isNotEmpty() -> "Diaper"
+        else -> "Session"
+    }
+    val end = listOfNotNull(f?.endTime, e.sleep?.endTime).maxOrNull()
+    return EventLook(
+        if (f != null) Icons.Filled.ChildCare else if (e.sleep != null) Icons.Filled.Bedtime else Icons.Filled.BabyChangingStation,
+        SeriesColors.Left,
+        title,
+        lines,
+        if (end != null && end > e.session.startTime) "${formatTime(e.session.startTime)} – ${formatTime(end)}" else formatTime(e.session.startTime),
+    )
+}
+
 private fun TimelineEvent.look(): EventLook = when (this) {
+    is TimelineEvent.SessionEvent -> sessionLook(this)
     is TimelineEvent.FeedingEvent -> {
         val f = feeding
         if (f.type == FeedingType.BREAST) {
-            val segments = f.segmentList
-            val sideLines = if (segments.isNotEmpty()) {
-                segments.map { "${it.side.label} ${formatTime(it.start)} – ${formatTime(it.end)} (${formatDuration(it.durationMs / 1000)})" }
-            } else {
-                listOf(
-                    buildList {
-                        if (f.leftSeconds > 0) add("Left ${formatDuration(f.leftSeconds.toLong())}")
-                        if (f.rightSeconds > 0) add("Right ${formatDuration(f.rightSeconds.toLong())}")
-                    }.joinToString(" · ")
-                )
-            }
             EventLook(
                 Icons.Filled.ChildCare, SeriesColors.Left,
                 "Breastfeeding · ${formatDuration(f.totalSeconds.toLong())}",
-                sideLines + listOfNotNull(
-                    weightLine(f),
-                    diaper?.let { d -> "Diaper: ${diaperSummary(d)}" + if (d.notes.isNotBlank()) " · ${d.notes}" else "" },
-                    f.notes.takeIf { it.isNotBlank() },
-                ),
+                sideLines(f) + listOfNotNull(weightLine(f), f.notes.takeIf { it.isNotBlank() }),
                 "${formatTime(f.startTime)} – ${formatTime(f.endTime)}",
             )
         } else {

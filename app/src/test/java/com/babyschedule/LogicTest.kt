@@ -13,7 +13,11 @@ import com.babyschedule.data.Side
 import com.babyschedule.data.Sleep
 import com.babyschedule.data.intakeGrams
 import com.babyschedule.data.segmentList
+import com.babyschedule.domain.FeedKind
+import com.babyschedule.domain.SessionDraft
+import com.babyschedule.domain.SleepMode
 import com.babyschedule.domain.StatsCalculator
+import com.babyschedule.util.resolveClockTime
 import java.time.LocalDate
 import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
@@ -92,6 +96,84 @@ class LogicTest {
         assertEquals(t0 + 8 * 60_000, f.endTime)
         assertEquals(300, f.leftSeconds)
         assertEquals(180, f.rightSeconds)
+    }
+
+    @Test
+    fun sessionDraftBuildsOneFeedFromSideTimes() {
+        val d = SessionDraft.new(at(1, 15)).copy(
+            diaperType = DiaperType.MIXED,
+            diaperAmount = "Lots",
+            diaperNotes = "yellow/green",
+            feedKind = FeedKind.BREAST,
+            segments = listOf(
+                Segment(Side.RIGHT, at(1, 15), at(1, 31)),
+                Segment(Side.LEFT, at(1, 31), at(1, 47)),
+                Segment(Side.RIGHT, at(1, 47), at(1, 54)),
+            ),
+            weightBefore = 2575,
+            weightAfter = 2620,
+            sleepMode = SleepMode.TIMES,
+            sleepStart = at(2, 0),
+            sleepEnd = at(4, 10),
+        )
+        assertTrue(d.canSave)
+        assertEquals(45, d.intakeGrams)
+        val f = d.toFeeding(7)!!
+        assertEquals(7L, f.sessionId)
+        assertEquals(at(1, 15), f.startTime)
+        assertEquals(at(1, 54), f.endTime)
+        assertEquals(16 * 60, f.leftSeconds)
+        assertEquals(23 * 60, f.rightSeconds)
+        assertEquals(Side.RIGHT, f.firstSide)
+        assertEquals(Side.RIGHT, f.lastSide)
+        assertEquals(3, f.segmentList.size)
+        assertEquals("yellow/green", d.toDiaper(7)!!.notes)
+        assertEquals(at(4, 10) - at(2, 0), d.toSleep(7)!!.let { it.endTime - it.startTime })
+
+        // Moving the session moves every time in it.
+        val moved = d.shiftedTo(at(2, 15))
+        assertEquals(at(2, 15), moved.segments.first().start)
+        assertEquals(at(5, 10), moved.sleepEnd)
+
+        // Round trip through the saved rows.
+        val back = SessionDraft.from(d.toSession(), f, d.toDiaper(7), d.toSleep(7))
+        assertEquals(d.segments, back.segments)
+        assertEquals(SleepMode.TIMES, back.sleepMode)
+        assertEquals(2620, back.weightAfter)
+    }
+
+    @Test
+    fun sessionDraftValidation() {
+        val empty = SessionDraft.new(at(9))
+        assertFalse(empty.canSave)
+        assertTrue(empty.copy(diaperType = DiaperType.WET).canSave)
+        val badSleep = empty.copy(sleepMode = SleepMode.TIMES, sleepStart = at(10), sleepEnd = at(9))
+        assertFalse(badSleep.canSave)
+        val noSides = empty.copy(feedKind = FeedKind.BREAST)
+        assertFalse(noSides.canSave)
+    }
+
+    @Test
+    fun oldFeedsWithoutSideTimesGetSegments() {
+        val f = Feeding(
+            type = FeedingType.BREAST, startTime = at(8), endTime = at(8, 30),
+            leftSeconds = 600, rightSeconds = 300, firstSide = Side.RIGHT,
+        )
+        val segs = SessionDraft.segmentsFor(f)
+        assertEquals(listOf(Segment(Side.RIGHT, at(8), at(8, 5)), Segment(Side.LEFT, at(8, 5), at(8, 15))), segs)
+    }
+
+    @Test
+    fun clockTimesResolveAcrossMidnight() {
+        val z = java.time.ZoneId.systemDefault()
+        fun local(d: LocalDate, h: Int, m: Int) = d.atTime(h, m).atZone(z).toInstant().toEpochMilli()
+        val ref = local(day, 23, 40)
+        // An end time of 00:20 after 23:40 is the next day.
+        assertEquals(local(day.plusDays(1), 0, 20), resolveClockTime(ref, 0, 20, after = true))
+        // The nearest 23:10 is the same evening.
+        assertEquals(local(day, 23, 10), resolveClockTime(ref, 23, 10, after = false))
+        // The nearest 00:05 is just after midnight.
+        assertEquals(local(day.plusDays(1), 0, 5), resolveClockTime(ref, 0, 5, after = false))
     }
 
     @Test

@@ -117,6 +117,10 @@ class AppPrefs(context: Context) {
     private val _sleepStart = MutableStateFlow(sp.getLong(K_SLEEP_START, 0L).takeIf { it > 0 })
     val sleepStart: StateFlow<Long?> = _sleepStart.asStateFlow()
 
+    /** Session the running sleep belongs to (started from the session form), if any. */
+    private val _sleepSessionId = MutableStateFlow(sp.getLong(K_SLEEP_SESSION, 0L).takeIf { it > 0 })
+    val sleepSessionId: StateFlow<Long?> = _sleepSessionId.asStateFlow()
+
     private val _sleepAlert = MutableStateFlow(
         SleepAlert(sp.getBoolean(K_ALERT_ON, true), sp.getInt(K_ALERT_MINUTES, 120))
     )
@@ -158,9 +162,13 @@ class AppPrefs(context: Context) {
         _timer.value = t
     }
 
-    fun setSleepStart(start: Long?) {
-        sp.edit().putLongOrRemove(K_SLEEP_START, start).apply()
+    fun setSleepStart(start: Long?, sessionId: Long? = null) {
+        sp.edit()
+            .putLongOrRemove(K_SLEEP_START, start)
+            .putLongOrRemove(K_SLEEP_SESSION, if (start == null) null else sessionId)
+            .apply()
         _sleepStart.value = start
+        _sleepSessionId.value = if (start == null) null else sessionId
     }
 
     private fun readProfile() = Profile(
@@ -195,6 +203,7 @@ class AppPrefs(context: Context) {
         const val K_BIRTH = "birth_epoch_day"
         const val K_BIRTH_WEIGHT = "birth_weight_g"
         const val K_SLEEP_START = "sleep_start"
+        const val K_SLEEP_SESSION = "sleep_session"
         const val K_ALERT_ON = "sleep_alert_on"
         const val K_ALERT_MINUTES = "sleep_alert_minutes"
         const val K_ALERT_SHOWN_FOR = "sleep_alert_shown_for"

@@ -14,11 +14,16 @@ import com.babyschedule.data.FeedingTimer
 import com.babyschedule.data.Growth
 import com.babyschedule.data.Profile
 import com.babyschedule.data.Side
+import com.babyschedule.data.FeedingType
+import com.babyschedule.data.Session
+import com.babyschedule.data.SessionBundle
 import com.babyschedule.data.Sleep
 import com.babyschedule.data.SleepAlert
 import com.babyschedule.notify.SleepAlertScheduler
 import com.babyschedule.domain.DayStats
 import com.babyschedule.domain.GrowthSummary
+import com.babyschedule.domain.SessionDraft
+import com.babyschedule.domain.SleepMode
 import com.babyschedule.domain.Stats
 import com.babyschedule.domain.StatsCalculator
 import com.babyschedule.util.startOfDay
@@ -32,6 +37,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -42,6 +48,12 @@ data class DayData(
     val diapers: List<Diaper> = emptyList(),
     val sleeps: List<Sleep> = emptyList(),
     val growth: List<Growth> = emptyList(),
+    /** Sessions that started on this day. */
+    val sessions: List<Session> = emptyList(),
+    /** Everything belonging to [sessions], even if it falls on another day. */
+    val sessionFeedings: List<Feeding> = emptyList(),
+    val sessionDiapers: List<Diaper> = emptyList(),
+    val sessionSleeps: List<Sleep> = emptyList(),
 ) {
     val summary: DayStats by lazy { StatsCalculator.day(date, feedings, diapers, sleeps) }
 }
@@ -54,6 +66,7 @@ class BabyViewModel(
     val profile: StateFlow<Profile> = repo.prefs.profile
     val timer: StateFlow<FeedingTimer> = repo.prefs.timer
     val sleepStart: StateFlow<Long?> = repo.prefs.sleepStart
+    val sleepSessionId: StateFlow<Long?> = repo.prefs.sleepSessionId
     val sleepAlert: StateFlow<SleepAlert> = repo.prefs.sleepAlert
 
     /** Emits the current date and changes at midnight. */
@@ -110,12 +123,25 @@ class BabyViewModel(
     private fun dayData(date: LocalDate): Flow<DayData> {
         val start = startOfDay(date)
         val end = startOfDay(date.plusDays(1))
-        return combine(
+        val base = combine(
             repo.feedings(start, end),
             repo.diapers(start, end),
             repo.sleeps(start, end),
             repo.growth(start, end),
-        ) { f, d, s, g -> DayData(date, f, d, s, g) }
+            repo.sessions(start, end),
+        ) { f, d, s, g, sessions -> DayData(date, f, d, s, g, sessions) }
+        return base.flatMapLatest { day ->
+            val ids = day.sessions.map { it.id }
+            if (ids.isEmpty()) {
+                flowOf(day)
+            } else {
+                combine(
+                    repo.sessionFeedings(ids),
+                    repo.sessionDiapers(ids),
+                    repo.sessionSleeps(ids),
+                ) { f, d, s -> day.copy(sessionFeedings = f, sessionDiapers = d, sessionSleeps = s) }
+            }
+        }
     }
 
     // ---- navigation state ----
@@ -151,24 +177,53 @@ class BabyViewModel(
 
     fun discardTimer() = repo.prefs.setTimer(FeedingTimer())
 
-    data class SavedSession(val feedingId: Long, val diaperId: Long?, val previous: FeedingTimer)
+    // ---- sessions ----
 
-    /** Saves the current session, with weight after and an optional diaper change. */
-    suspend fun saveSession(weightAfterGrams: Int?, diaper: Diaper?, notes: String): SavedSession? {
-        val previous = timer.value
-        val feeding = previous.toFeeding(now())
-            ?.copy(notes = notes.trim(), weightAfterGrams = weightAfterGrams)
-            ?: return null
-        repo.prefs.setTimer(FeedingTimer())
-        val feedingId = repo.save(feeding)
-        val diaperId = diaper?.let { repo.save(it.copy(time = feeding.startTime, feedingId = feedingId)) }
-        return SavedSession(feedingId, diaperId, previous)
+    suspend fun loadSessionDraft(id: Long): SessionDraft? {
+        val b = repo.sessionBundle(id) ?: return null
+        val live = if (sleepSessionId.value == id) sleepStart.value else null
+        return SessionDraft.from(b.session, b.feedings.firstOrNull(), b.diapers.firstOrNull(), b.sleeps.firstOrNull(), live)
     }
 
-    suspend fun undoSession(saved: SavedSession) {
-        repo.delete(Feeding(id = saved.feedingId, type = com.babyschedule.data.FeedingType.BREAST, startTime = 0, endTime = 0))
-        saved.diaperId?.let { repo.delete(Diaper(id = it, time = 0, type = DiaperType.WET)) }
-        repo.prefs.setTimer(saved.previous)
+    /** Saves the form: the session plus its feed, diaper and sleep (adding, updating or removing each). */
+    suspend fun saveSession(d: SessionDraft): Long {
+        val id = repo.save(d.toSession())
+
+        val feeding = d.toFeeding(id)
+        if (feeding != null) repo.save(feeding)
+        else if (d.feedingId != 0L) repo.delete(Feeding(id = d.feedingId, type = FeedingType.BREAST, startTime = 0, endTime = 0))
+
+        val diaper = d.toDiaper(id)
+        if (diaper != null) repo.save(diaper)
+        else if (d.diaperId != 0L) repo.delete(Diaper(id = d.diaperId, time = 0, type = DiaperType.WET))
+
+        val sleep = d.toSleep(id)
+        if (sleep != null) repo.save(sleep)
+        else if (d.sleepId != 0L) repo.delete(Sleep(id = d.sleepId, startTime = 0, endTime = 0))
+
+        val liveForThis = sleepSessionId.value == id
+        if (d.sleepMode == SleepMode.NOW) {
+            repo.prefs.setSleepStart(d.sleepStart, id)
+            sleepAlerts.sync()
+        } else if (liveForThis) {
+            repo.prefs.setSleepStart(null)
+            sleepAlerts.sync()
+        }
+        if (d.fromTimer) repo.prefs.setTimer(FeedingTimer())
+        return id
+    }
+
+    suspend fun deleteSession(id: Long): SessionBundle? {
+        val b = repo.sessionBundle(id) ?: return null
+        (b.feedings + b.diapers + b.sleeps).forEach { repo.delete(it) }
+        repo.delete(b.session)
+        if (sleepSessionId.value == id) repo.prefs.setSleepStart(sleepStart.value, null)
+        return b
+    }
+
+    suspend fun restoreSession(b: SessionBundle) {
+        repo.restore(b.session)
+        (b.feedings + b.diapers + b.sleeps).forEach { repo.restore(it) }
     }
 
     // ---- sleep timer ----
@@ -188,11 +243,23 @@ class BabyViewModel(
         sleepAlerts.sync()
     }
 
-    suspend fun stopSleep(): Sleep? {
+    /**
+     * A recent session (started up to 3 hours before the running sleep) that this
+     * sleep could be added to. Null if the sleep is already linked or there is none.
+     */
+    suspend fun sessionToAttachSleep(): Session? {
+        if (sleepSessionId.value != null) return null
         val start = sleepStart.value ?: return null
+        return repo.latestSessionWithoutSleep(start - 3 * 3_600_000L, start)
+    }
+
+    /** Ends the running sleep, linking it to [attachTo] (or the session it was started from). */
+    suspend fun stopSleep(attachTo: Long? = null): Sleep? {
+        val start = sleepStart.value ?: return null
+        val sessionId = sleepSessionId.value ?: attachTo
         repo.prefs.setSleepStart(null)
         sleepAlerts.sync()
-        val sleep = Sleep(startTime = start, endTime = now())
+        val sleep = Sleep(startTime = start, endTime = now(), sessionId = sessionId)
         val id = repo.save(sleep)
         return sleep.copy(id = id)
     }

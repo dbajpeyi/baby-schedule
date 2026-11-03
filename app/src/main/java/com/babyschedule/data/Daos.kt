@@ -15,6 +15,12 @@ interface FeedingDao {
     @Query("SELECT * FROM feedings ORDER BY startTime DESC LIMIT 1")
     fun latest(): Flow<Feeding?>
 
+    @Query("SELECT * FROM feedings WHERE sessionId IN (:ids)")
+    fun forSessions(ids: List<Long>): Flow<List<Feeding>>
+
+    @Query("SELECT * FROM feedings WHERE sessionId = :id")
+    suspend fun forSession(id: Long): List<Feeding>
+
     @Query("SELECT * FROM feedings WHERE weightBeforeGrams IS NOT NULL ORDER BY startTime ASC")
     fun weighed(): Flow<List<Feeding>>
 
@@ -39,6 +45,12 @@ interface DiaperDao {
     @Query("SELECT * FROM diapers ORDER BY time DESC LIMIT 1")
     fun latest(): Flow<Diaper?>
 
+    @Query("SELECT * FROM diapers WHERE sessionId IN (:ids)")
+    fun forSessions(ids: List<Long>): Flow<List<Diaper>>
+
+    @Query("SELECT * FROM diapers WHERE sessionId = :id")
+    suspend fun forSession(id: Long): List<Diaper>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(item: Diaper): Long
 
@@ -57,6 +69,12 @@ interface SleepDao {
 
     @Query("SELECT * FROM sleeps ORDER BY endTime DESC LIMIT 1")
     fun latest(): Flow<Sleep?>
+
+    @Query("SELECT * FROM sleeps WHERE sessionId IN (:ids)")
+    fun forSessions(ids: List<Long>): Flow<List<Sleep>>
+
+    @Query("SELECT * FROM sleeps WHERE sessionId = :id")
+    suspend fun forSession(id: Long): List<Sleep>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(item: Sleep): Long
@@ -83,5 +101,31 @@ interface GrowthDao {
     suspend fun update(item: Growth)
 
     @Query("DELETE FROM growth WHERE id = :id")
+    suspend fun deleteById(id: Long)
+}
+
+@Dao
+interface SessionDao {
+    @Query("SELECT * FROM sessions WHERE startTime >= :from AND startTime < :to ORDER BY startTime DESC")
+    fun between(from: Long, to: Long): Flow<List<Session>>
+
+    @Query("SELECT * FROM sessions WHERE id = :id")
+    suspend fun get(id: Long): Session?
+
+    /** The latest session that started in [from, to] and has no sleep yet. */
+    @Query(
+        "SELECT * FROM sessions WHERE startTime >= :from AND startTime <= :to " +
+            "AND id NOT IN (SELECT sessionId FROM sleeps WHERE sessionId IS NOT NULL) " +
+            "ORDER BY startTime DESC LIMIT 1"
+    )
+    suspend fun latestWithoutSleep(from: Long, to: Long): Session?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(item: Session): Long
+
+    @Update
+    suspend fun update(item: Session)
+
+    @Query("DELETE FROM sessions WHERE id = :id")
     suspend fun deleteById(id: Long)
 }

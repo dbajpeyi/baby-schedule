@@ -36,6 +36,7 @@ import com.babyschedule.data.FeedingType
 import com.babyschedule.data.MilkType
 import com.babyschedule.data.durationMs
 import com.babyschedule.data.totalSeconds
+import com.babyschedule.domain.SessionDraft
 import com.babyschedule.util.defaultTimeFor
 import com.babyschedule.util.formatDayLabel
 import com.babyschedule.util.formatDuration
@@ -60,22 +61,20 @@ fun DayDetailScreen(vm: BabyViewModel, ui: UiActions, category: Category, onClos
     val isToday = selected == LocalDate.now()
     BackHandler(onBack = onClose)
 
-    // Diapers changed during a feed are shown inside that feed on other pages; list them all here.
-    val events = if (category == Category.DIAPERS) day.diapers.map { TimelineEvent.DiaperEvent(it) } else day.timeline().filter { e ->
-        when (category) {
-            Category.FEEDS -> e is TimelineEvent.FeedingEvent
-            Category.BREAST -> e is TimelineEvent.FeedingEvent && e.feeding.type == FeedingType.BREAST
-            Category.BOTTLE -> e is TimelineEvent.FeedingEvent && e.feeding.type == FeedingType.BOTTLE
-            Category.DIAPERS -> e is TimelineEvent.DiaperEvent
-            Category.SLEEP -> e is TimelineEvent.SleepEvent
-        }
-    }
+    // Every entry of this kind, whether logged in a session or on its own (tapping opens its session).
+    val events: List<TimelineEvent> = when (category) {
+        Category.FEEDS -> day.feedings.map { TimelineEvent.FeedingEvent(it) }
+        Category.BREAST -> day.feedings.filter { it.type == FeedingType.BREAST }.map { TimelineEvent.FeedingEvent(it) }
+        Category.BOTTLE -> day.feedings.filter { it.type == FeedingType.BOTTLE }.map { TimelineEvent.FeedingEvent(it) }
+        Category.DIAPERS -> day.diapers.map { TimelineEvent.DiaperEvent(it) }
+        Category.SLEEP -> day.sleeps.map { TimelineEvent.SleepEvent(it) }
+    }.sortedByDescending { it.time }
     val time = defaultTimeFor(selected)
-    val (addLabel, addRequest) = when (category) {
-        Category.FEEDS, Category.BREAST -> "Add past breastfeed" to DialogRequest.newBreastFeeding(time)
-        Category.BOTTLE -> "Add bottle feed" to DialogRequest.newBottle(time)
-        Category.DIAPERS -> "Add diaper" to DialogRequest.newDiaper(time)
-        Category.SLEEP -> "Add sleep" to DialogRequest.newSleep(time)
+    val (addLabel, addAction) = when (category) {
+        Category.FEEDS, Category.BREAST -> "Log a session" to { ui.editDraft(SessionDraft.new(time)) }
+        Category.BOTTLE -> "Add bottle feed" to { ui.openDialog(DialogRequest.newBottle(time)) }
+        Category.DIAPERS -> "Add diaper" to { ui.openDialog(DialogRequest.newDiaper(time)) }
+        Category.SLEEP -> "Add sleep" to { ui.openDialog(DialogRequest.newSleep(time)) }
     }
 
     Scaffold(
@@ -121,7 +120,7 @@ fun DayDetailScreen(vm: BabyViewModel, ui: UiActions, category: Category, onClos
             }
             item {
                 OutlinedButton(
-                    onClick = { ui.openDialog(addRequest) },
+                    onClick = addAction,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                 ) {
                     Icon(Icons.Filled.Add, contentDescription = null)
@@ -140,7 +139,7 @@ fun DayDetailScreen(vm: BabyViewModel, ui: UiActions, category: Category, onClos
             } else {
                 item { Text("Entries · tap to edit", style = MaterialTheme.typography.titleSmall) }
                 items(events, key = { it.key }) { event ->
-                    TimelineRow(event) { ui.openDialog(event.editRequest()) }
+                    TimelineRow(event) { ui.open(event) }
                 }
             }
             item { Spacer(Modifier.height(24.dp)) }

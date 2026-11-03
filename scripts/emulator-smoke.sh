@@ -70,45 +70,53 @@ tap "Birth weight" && type_text "3.4"
 shot 02-profile-dialog
 tap "Save"
 
-# Breastfeeding session: start on left, switch, end, review, save
+# Log a session after the fact: diaper, weights, sides with times, sleep
 to_top
-tap "Start breastfeeding"
-tap "Weight before" && type_text "2575"
-shot 03-choose-side
-tap "Left"
-sleep 4
-shot 04-feeding-left
-tap "Switch to Right"
-sleep 3
-shot 05-feeding-right
-tap "End feeding"
-tap "Weight after" && type_text "2620"
-tap "Yes"
+tap "Log a session"
+tap "Pee + poop"
 tap "Lots"
 tap "Diaper notes (e.g. colour)" && type_text "yellow-green"
-shot 06-review-feeding
-tap "Save feeding"
+tap "Breast"
+tap "Weight before" && type_text "2575"
+tap "Add side"
+tap "Add side"
+tap "Weight after" && type_text "2620"
+tap "Add times"
+shot 03-session-form
+tap "Save session"
 sleep 1
-shot 07-feeding-saved
+shot 04-session-in-log
+
+# Live feeding timer hands off to the session form
+tap "Feeding timer"
+tap "Left"
+sleep 3
+tap "Switch to Right"
+sleep 3
+shot 05-feeding-timer
+tap "End feeding and log session"
+shot 06-session-from-timer
+tap "Save session"
 
 # Bottle, diaper and weight via "Add entry"
-tap "Add bottle, diaper, sleep or weight"
+tap "Add a single entry (bottle, diaper, weight…)"
 shot 08-add-menu
-tap "Bottle feed" && tap "Amount" && type_text "90"
+tap "Bottle feed only" && tap "Amount" && type_text "90"
 tap "Save"
-tap "Add bottle, diaper, sleep or weight"
-tap "Diaper" && tap "Poop"
+tap "Add a single entry (bottle, diaper, weight…)"
+tap "Diaper only" && tap "Poop"
 tap "Save"
-tap "Add bottle, diaper, sleep or weight"
+tap "Add a single entry (bottle, diaper, weight…)"
 tap "Weight / growth" && tap "Weight" && type_text "2650"
 tap "Save"
 
 # Sleep (may trigger the notification permission prompt on Android 13+)
-tap "Fell asleep"
+tap "Fell asleep now"
 if xy=$(find_xy "Allow"); then adb shell input tap $xy; sleep 1; fi
 sleep 3
 shot 09-sleeping
 tap "Woke up"
+if xy=$(find_xy "Keep separate"); then adb shell input tap $xy; sleep 1; fi
 
 # Settings
 tap "Settings"
@@ -144,7 +152,7 @@ tap "Cancel"
 # A running feed survives the app being killed
 tap "Today"
 to_top
-tap "Start breastfeeding"
+tap "Feeding timer"
 tap "Right"
 adb shell am force-stop $PKG
 sleep 2

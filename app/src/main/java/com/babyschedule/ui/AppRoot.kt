@@ -27,6 +27,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.babyschedule.domain.SessionDraft
+import kotlinx.coroutines.launch
 
 enum class Tab(val label: String, val icon: ImageVector) {
     TODAY("Today", Icons.Filled.Today),
@@ -42,15 +44,36 @@ fun AppRoot(vm: BabyViewModel) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val requestNotifications = rememberNotificationPermissionRequest()
+    var editor by remember { mutableStateOf<SessionDraft?>(null) }
     val ui = remember(scope, snackbar, requestNotifications) {
-        UiActions(scope, snackbar, requestNotifications) { dialog = it }
+        UiActions(
+            scope = scope,
+            snackbar = snackbar,
+            requestNotifications = requestNotifications,
+            openDialog = { dialog = it },
+            openSession = { id -> scope.launch { vm.loadSessionDraft(id)?.let { editor = it } } },
+            editDraft = { editor = it },
+        )
     }
     val profile by vm.profile.collectAsStateWithLifecycle()
     var showFeeding by rememberSaveable { mutableStateOf(false) }
     var detail by rememberSaveable { mutableStateOf<Category?>(null) }
 
+    val openEditor = editor
+    if (openEditor != null) {
+        SessionFormScreen(openEditor, vm, ui, onClose = { editor = null })
+        DialogHost(dialog, vm, ui, onDismiss = { dialog = null })
+        return
+    }
     if (showFeeding) {
-        FeedingSessionScreen(vm, ui, onClose = { showFeeding = false })
+        FeedingSessionScreen(
+            vm, ui,
+            onClose = { showFeeding = false },
+            onFinish = { draft ->
+                showFeeding = false
+                editor = draft
+            },
+        )
         DialogHost(dialog, vm, ui, onDismiss = { dialog = null })
         return
     }

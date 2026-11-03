@@ -4,14 +4,19 @@ A simple Android app for tracking a newborn's day. It's built to be quick to use
 
 ## Features
 
-- **Breastfeeding sessions.** Tap **Start breastfeeding** and pick the starting side (the suggested side is highlighted). Use **Switch side** and **Pause** as needed, then **End feeding**. Check the summary (left and right minutes, plus an optional diaper change) and save it as one feed. The timer keeps running if you leave the screen or close the app.
-- **Sleep.** Tap **Fell asleep**, then **Woke up**.
-- **Long sleep alert.** Get a notification when a sleep goes on longer than a set time (2 hours by default). Change it in **Settings** (gear icon).
-- **Add entry.** Bottle feeds, diapers, past feeds or sleeps, and weight. Each opens a short form with **Save**, so nothing is logged by accident.
-- **Today.** Shows the last feed, the suggested next side, sleep status, today's totals and today's log.
-- **History.** Go back day by day. Tap any entry to edit or delete it.
-- **Stats** for 7, 14 or 30 days: feeds per day, time between feeds, left/right balance, diapers and sleep, with simple bar charts.
-- **Growth.** Weight, length and head size. Shows the change since birth and the weekly gain, with a weight chart.
+- **Log a session (main action).** One form covers a whole care session, filled in after the fact:
+  - **Diaper:** pee, poop or both, with an amount and notes (e.g. colour)
+  - **Feeding:** breast or bottle. For breast, enter the weight before, then each side with **start and end times** (e.g. Right 1:15–1:31, Left 1:31–1:47; **+ Add side** continues from the last one), then the weight after. The app shows how much was drunk.
+  - **Sleep:** fell asleep and woke-up times, or "sleeping now", which starts a sleep timer
+  - **Notes**
+
+  The log shows each session as one entry. Tap it to edit or delete.
+- **Live timers (secondary).** The feeding timer records side switches as they happen, and ending it opens the session form already filled in. "Fell asleep now" times a sleep; when the baby wakes, the app offers to add that sleep to the session just before it.
+- **Long sleep alert.** A notification when a sleep goes on longer than a set time (2 hours by default). Set it in **Settings**.
+- **Single entries.** Bottle, diaper, sleep or weight, logged on their own.
+- **Today.** The last feed, the suggested next side, sleep status, today's totals and today's log.
+- **History and breakdowns.** Go back day by day. Tap a total to see the feeds, breastfeeding (left/right and weighed intake), bottle, diapers or sleep for that day.
+- **Stats** for 7, 14 or 30 days, and **Growth** in grams (including weights taken before feeds).
 
 Everything is stored on the phone (Room database). Android's automatic backup includes it.
 

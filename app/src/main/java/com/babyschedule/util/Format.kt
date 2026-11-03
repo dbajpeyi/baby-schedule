@@ -110,3 +110,18 @@ fun formatAge(birth: LocalDate, today: LocalDate = LocalDate.now()): String {
     val months = p.years * 12 + p.months
     return "$months months" + if (p.days > 0) " ${p.days} days" else ""
 }
+
+/**
+ * Turns a clock time picked by the user into a full timestamp near [reference]:
+ * the closest such time, or with [after] the first one not before [reference]
+ * (e.g. an end time that falls after midnight).
+ */
+fun resolveClockTime(reference: Long, hour: Int, minute: Int, after: Boolean): Long {
+    val base = toZoned(reference).withHour(hour).withMinute(minute).withSecond(0).withNano(0)
+    val candidates = listOf(base.minusDays(1), base, base.plusDays(1)).map { it.toInstant().toEpochMilli() }
+    return if (after) {
+        candidates.filter { it >= reference - MINUTE_MS }.minOrNull() ?: candidates.last()
+    } else {
+        candidates.minByOrNull { abs(it - reference) } ?: candidates[1]
+    }
+}

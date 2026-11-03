@@ -59,6 +59,8 @@ data class Feeding(
     val weightAfterGrams: Int? = null,
     /** Side switches in order, see [Segments]. Empty for manually entered feeds. */
     val segments: String = "",
+    /** The [Session] this feed belongs to, if any. */
+    val sessionId: Long? = null,
 )
 
 val Feeding.totalSeconds: Int get() = leftSeconds + rightSeconds
@@ -82,8 +84,9 @@ data class Diaper(
     val color: String = "",
     /** One of [DiaperOptions.amounts] or empty. */
     val amount: String = "",
-    /** Set when the change was logged as part of a feeding session. */
+    /** Legacy link from version 2; replaced by [sessionId]. */
     val feedingId: Long? = null,
+    val sessionId: Long? = null,
 )
 
 val Diaper.isWet: Boolean get() = type == DiaperType.WET || type == DiaperType.MIXED
@@ -95,6 +98,7 @@ data class Sleep(
     val startTime: Long,
     val endTime: Long,
     val notes: String = "",
+    val sessionId: Long? = null,
 )
 
 val Sleep.durationMs: Long get() = (endTime - startTime).coerceAtLeast(0)
@@ -107,5 +111,16 @@ data class Growth(
     val weightGrams: Int? = null,
     val lengthCm: Float? = null,
     val headCm: Float? = null,
+    val notes: String = "",
+)
+
+/**
+ * One care session, e.g. diaper change, weighing, a feed and the nap after it.
+ * The feed, diaper and sleep rows point to it through their `sessionId`.
+ */
+@Entity(tableName = "sessions")
+data class Session(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val startTime: Long,
     val notes: String = "",
 )
