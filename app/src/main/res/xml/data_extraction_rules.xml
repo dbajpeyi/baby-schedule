@@ -3,9 +3,11 @@
     <cloud-backup>
         <include domain="database" path="." />
         <include domain="sharedpref" path="." />
+        <include domain="file" path="profile_photo.jpg" />
     </cloud-backup>
     <device-transfer>
         <include domain="database" path="." />
         <include domain="sharedpref" path="." />
+        <include domain="file" path="profile_photo.jpg" />
     </device-transfer>
 </data-extraction-rules>

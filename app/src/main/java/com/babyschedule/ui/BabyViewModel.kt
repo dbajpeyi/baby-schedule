@@ -1,5 +1,7 @@
 package com.babyschedule.ui
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -13,6 +15,7 @@ import com.babyschedule.data.Feeding
 import com.babyschedule.data.FeedingTimer
 import com.babyschedule.data.Growth
 import com.babyschedule.data.Profile
+import com.babyschedule.data.ProfilePhoto
 import com.babyschedule.data.Side
 import com.babyschedule.data.FeedingType
 import com.babyschedule.data.Session
@@ -28,7 +31,9 @@ import com.babyschedule.domain.Stats
 import com.babyschedule.domain.StatsCalculator
 import com.babyschedule.util.startOfDay
 import java.time.LocalDate
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -61,6 +66,7 @@ data class DayData(
 class BabyViewModel(
     private val repo: BabyRepository,
     private val sleepAlerts: SleepAlertScheduler,
+    private val appContext: Context,
 ) : ViewModel() {
 
     val profile: StateFlow<Profile> = repo.prefs.profile
@@ -69,6 +75,19 @@ class BabyViewModel(
     val sleepSessionId: StateFlow<Long?> = repo.prefs.sleepSessionId
     val sleepAlert: StateFlow<SleepAlert> = repo.prefs.sleepAlert
     val confetti: StateFlow<Boolean> = repo.prefs.confetti
+    val photoVersion: StateFlow<Long> = repo.prefs.photoVersion
+
+    /** Stores the picked photo as the profile picture. Returns false if it couldn't be read. */
+    suspend fun setProfilePhoto(uri: Uri): Boolean {
+        val ok = withContext(Dispatchers.IO) { ProfilePhoto.save(appContext, uri) }
+        if (ok) repo.prefs.setPhotoVersion(System.currentTimeMillis())
+        return ok
+    }
+
+    suspend fun removeProfilePhoto() {
+        withContext(Dispatchers.IO) { ProfilePhoto.delete(appContext) }
+        repo.prefs.setPhotoVersion(0L)
+    }
 
     fun setConfetti(on: Boolean) = repo.prefs.setConfetti(on)
 
@@ -283,7 +302,7 @@ class BabyViewModel(
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as BabyScheduleApp
-                BabyViewModel(app.repository, app.sleepAlerts)
+                BabyViewModel(app.repository, app.sleepAlerts, app)
             }
         }
     }

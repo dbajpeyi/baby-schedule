@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -39,13 +41,18 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.text.font.FontWeight
@@ -57,6 +64,7 @@ import com.babyschedule.data.Feeding
 import com.babyschedule.data.FeedingType
 import com.babyschedule.data.Growth
 import com.babyschedule.data.MilkType
+import com.babyschedule.data.ProfilePhoto
 import com.babyschedule.data.Session
 import com.babyschedule.data.Sleep
 import com.babyschedule.data.intakeGrams
@@ -71,6 +79,8 @@ import com.babyschedule.util.formatTime
 import com.babyschedule.util.formatWeight
 import com.babyschedule.util.formatWeightChange
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -534,6 +544,36 @@ fun rememberNotificationPermissionRequest(): () -> Unit {
             ) {
                 launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
+        }
+    }
+}
+
+/** Round profile photo, or a baby icon if none has been picked. */
+@Composable
+fun BabyAvatar(photoVersion: Long, size: Dp, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val image by produceState<ImageBitmap?>(null, photoVersion) {
+        value = if (photoVersion == 0L) null else withContext(Dispatchers.IO) {
+            ProfilePhoto.load(context)?.asImageBitmap()
+        }
+    }
+    Box(
+        modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primaryContainer),
+        contentAlignment = Alignment.Center,
+    ) {
+        val bitmap = image
+        if (bitmap != null) {
+            Image(bitmap, contentDescription = "Profile photo", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        } else {
+            Icon(
+                Icons.Filled.ChildCare,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(size * 0.55f),
+            )
         }
     }
 }

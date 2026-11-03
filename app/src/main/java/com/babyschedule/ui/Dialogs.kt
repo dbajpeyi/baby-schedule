@@ -1,6 +1,12 @@
 package com.babyschedule.ui
 
 import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.provider.Settings
 import android.text.format.DateFormat
 import androidx.compose.foundation.layout.Arrangement
@@ -130,11 +136,19 @@ fun DialogHost(request: DialogRequest?, vm: BabyViewModel, ui: UiActions, onDism
                 onSave = { vm.save(it); onDismiss() },
                 onDelete = deleteAction(request.growth, request.growth.id == 0L, "Measurement"),
             )
-            DialogRequest.EditProfile -> ProfileDialog(
-                initial = vm.profile.value,
-                onDismiss = onDismiss,
-                onSave = { vm.saveProfile(it); onDismiss() },
-            )
+            DialogRequest.EditProfile -> {
+                val photoVersion by vm.photoVersion.collectAsStateWithLifecycle()
+                ProfileDialog(
+                    initial = vm.profile.value,
+                    photoVersion = photoVersion,
+                    onPhotoPicked = { uri ->
+                        ui.launch { if (!vm.setProfilePhoto(uri)) ui.message("Couldn't read that photo") }
+                    },
+                    onRemovePhoto = { ui.launch { vm.removeProfilePhoto() } },
+                    onDismiss = onDismiss,
+                    onSave = { vm.saveProfile(it); onDismiss() },
+                )
+            }
             DialogRequest.AppSettings -> SettingsDialog(
                 initial = vm.sleepAlert.value,
                 initialConfetti = vm.confetti.value,
@@ -437,7 +451,20 @@ fun GrowthDialog(
 }
 
 @Composable
-fun ProfileDialog(initial: Profile, onDismiss: () -> Unit, onSave: (Profile) -> Unit) {
+fun ProfileDialog(
+    initial: Profile,
+    photoVersion: Long,
+    onPhotoPicked: (Uri) -> Unit,
+    onRemovePhoto: () -> Unit,
+    onDismiss: () -> Unit,
+    onSave: (Profile) -> Unit,
+) {
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) onPhotoPicked(uri)
+    }
+    val launchPicker = {
+        pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
     var name by remember { mutableStateOf(initial.name) }
     var birth by remember { mutableStateOf(initial.birthDate) }
     var birthWeight by remember { mutableStateOf(gramsText(initial.birthWeightGrams)) }
@@ -448,6 +475,15 @@ fun ProfileDialog(initial: Profile, onDismiss: () -> Unit, onSave: (Profile) -> 
         title = { Text("Baby profile") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    BabyAvatar(photoVersion, 96.dp, Modifier.clickable { launchPicker() })
+                    Row {
+                        TextButton(onClick = launchPicker) { Text(if (photoVersion == 0L) "Add photo" else "Change photo") }
+                        if (photoVersion != 0L) {
+                            TextButton(onClick = onRemovePhoto) { Text("Remove") }
+                        }
+                    }
+                }
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },

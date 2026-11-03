@@ -131,6 +131,15 @@ class AppPrefs(context: Context) {
         _sleepAlert.value = a
     }
 
+    private val _photoVersion = MutableStateFlow(sp.getLong(K_PHOTO_VERSION, 0L))
+    /** Changes whenever the profile photo changes (0 = no photo). */
+    val photoVersion: StateFlow<Long> = _photoVersion.asStateFlow()
+
+    fun setPhotoVersion(v: Long) {
+        sp.edit().putLong(K_PHOTO_VERSION, v).apply()
+        _photoVersion.value = v
+    }
+
     private val _confetti = MutableStateFlow(sp.getBoolean(K_CONFETTI, true))
     /** Play confetti when a new session is saved. */
     val confetti: StateFlow<Boolean> = _confetti.asStateFlow()
@@ -215,6 +224,7 @@ class AppPrefs(context: Context) {
         const val K_SLEEP_SESSION = "sleep_session"
         const val K_ALERT_ON = "sleep_alert_on"
         const val K_CONFETTI = "confetti"
+        const val K_PHOTO_VERSION = "photo_version"
         const val K_ALERT_MINUTES = "sleep_alert_minutes"
         const val K_ALERT_SHOWN_FOR = "sleep_alert_shown_for"
         const val K_T_START = "timer_start"

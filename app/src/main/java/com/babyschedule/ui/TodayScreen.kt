@@ -70,6 +70,7 @@ fun TodayScreen(
     onSeeHistory: () -> Unit,
 ) {
     val profile by vm.profile.collectAsStateWithLifecycle()
+    val photoVersion by vm.photoVersion.collectAsStateWithLifecycle()
     val timer by vm.timer.collectAsStateWithLifecycle()
     val sleepStart by vm.sleepStart.collectAsStateWithLifecycle()
     val sleepSessionId by vm.sleepSessionId.collectAsStateWithLifecycle()
@@ -96,7 +97,7 @@ fun TodayScreen(
         if (!profile.isSet) {
             item { ProfilePrompt { ui.openDialog(DialogRequest.EditProfile) } }
         } else {
-            item { BabyHeader(profile) }
+            item { BabyHeader(profile, photoVersion) { ui.openDialog(DialogRequest.EditProfile) } }
         }
 
         // 1. Main action: log what happened.
@@ -217,15 +218,19 @@ private fun ProfilePrompt(onClick: () -> Unit) {
 }
 
 @Composable
-private fun BabyHeader(profile: Profile) {
-    Column {
-        Text(
-            profile.name.ifBlank { "Baby" },
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
-        profile.birthDate?.let {
-            Text(formatAge(it), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun BabyHeader(profile: Profile, photoVersion: Long, onEditProfile: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        BabyAvatar(photoVersion, 64.dp, Modifier.clickable(onClick = onEditProfile))
+        Spacer(Modifier.width(14.dp))
+        Column {
+            Text(
+                profile.name.ifBlank { "Baby" },
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            profile.birthDate?.let {
+                Text(formatAge(it), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
